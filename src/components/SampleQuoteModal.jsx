@@ -1,5 +1,4 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Trash2,
   Printer,
@@ -20,7 +19,6 @@ import Modal from "./Modal";
 import InputField from "./InputField";
 import {
   getDefaultTermStrings,
-  getNonDefaultTermStrings,
   getGlobalTerms,
 } from "../data/termsStorage";
 import CategoryTermsModal from "./CategoryTermsModal";
@@ -205,7 +203,7 @@ const SampleQuoteModal = ({
   onClose,
   onSave,
 }) => {
-  const [presetKey, setPresetKey] = useState(() =>
+  const [presetKey] = useState(() =>
     inferSQPresetKey(presetData),
   );
   const [formData, setFormData] = useState(() =>
@@ -241,7 +239,7 @@ const SampleQuoteModal = ({
   }, [formData, presetKey]);
 
   // Terms
-  const [termOptions, setTermOptions] = useState(() => {
+  const [ setTermOptions] = useState(() => {
     const defaults = getDefaultTermStrings();
     return {
       inclusions: Array.from(
@@ -426,36 +424,6 @@ const SampleQuoteModal = ({
     setFormData((p) => ({
       ...p,
       scopeItems: p.scopeItems.filter((_, i) => i !== idx),
-    }));
-  };
-
-  const updateMaterial = (scopeIdx, matIdx, key, value) => {
-    setFormData((p) => ({
-      ...p,
-      scopeItems: p.scopeItems.map((s, i) =>
-        i === scopeIdx
-          ? {
-              ...s,
-              materials: (s.materials || []).map((m, j) =>
-                j === matIdx ? { ...m, [key]: value } : m,
-              ),
-            }
-          : s,
-      ),
-    }));
-  };
-
-  const removeMaterial = (scopeIdx, matIdx) => {
-    setFormData((p) => ({
-      ...p,
-      scopeItems: p.scopeItems.map((s, i) =>
-        i === scopeIdx
-          ? {
-              ...s,
-              materials: (s.materials || []).filter((_, j) => j !== matIdx),
-            }
-          : s,
-      ),
     }));
   };
 
