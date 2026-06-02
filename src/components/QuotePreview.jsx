@@ -337,11 +337,11 @@ const QuotePreview = ({ quote }) => {
       {/* Category-wise Terms & Conditions display */}
       {(() => {
         const categoriesList = [
-          { id: "STATUATORY", label: "STATUTORY" },
-          { id: "DELIVERY", label: "DELIVERY" },
-          { id: "PAYMENTS", label: "PAYMENT" },
-          { id: "TECHNICAL", label: "TECHNICAL" },
-          { id: "GENERAL", label: "GENERAL" },
+          { id: "STATUATORY", label: "Statutory" },
+          { id: "DELIVERY", label: "Delivery" },
+          { id: "TECHNICAL", label: "Commercial" },
+          { id: "PAYMENTS", label: "Payment" },
+          { id: "GENERAL", label: "Warranty" },
         ];
 
         const categoriesToRender = categoriesList
@@ -389,41 +389,45 @@ const QuotePreview = ({ quote }) => {
                 <h3 className="text-[10.5px] font-bold tracking-widest text-black uppercase border-b border-black/10 pb-1 mb-3">
                   {cat.label}
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {cat.inclusions.length > 0 && (
-                    <div>
-                      <p className="text-[9.5px] tracking-wider text-emerald-700 font-bold mb-1.5 uppercase">
-                        Included
-                      </p>
-                      <ul className="space-y-1 text-[11px] text-text-muted">
-                        {cat.inclusions.map((line, i) => (
-                          <li key={i} className="flex gap-2 items-start">
-                            <span className="text-emerald-600 font-bold shrink-0">
-                              ✓
-                            </span>
-                            <span>{line}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {cat.exclusions.length > 0 && (
-                    <div>
-                      <p className="text-[9.5px] tracking-wider text-red-600 font-bold mb-1.5 uppercase">
-                        Not Included
-                      </p>
-                      <ul className="space-y-1 text-[11px] text-text-muted">
-                        {cat.exclusions.map((line, i) => (
-                          <li key={i} className="flex gap-2 items-start">
-                            <span className="text-red-500 font-bold shrink-0">
-                              ✕
-                            </span>
-                            <span>{line}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {cat.inclusions.length > 0 && (
+                      <>
+                        <p className="text-[9.5px] tracking-wider text-emerald-700 font-bold mb-1.5 uppercase">
+                          Included
+                        </p>
+                        <ul className="space-y-1 text-[11px] text-text-muted">
+                          {cat.inclusions.map((line, i) => (
+                            <li key={i} className="flex gap-2 items-start">
+                              <span className="text-emerald-600 font-bold shrink-0">
+                                ✓
+                              </span>
+                              <span>{line}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    {cat.exclusions.length > 0 && (
+                      <>
+                        <p className="text-[9.5px] tracking-wider text-red-600 font-bold mb-1.5 uppercase">
+                          Not Included
+                        </p>
+                        <ul className="space-y-1 text-[11px] text-text-muted">
+                          {cat.exclusions.map((line, i) => (
+                            <li key={i} className="flex gap-2 items-start">
+                              <span className="text-red-500 font-bold shrink-0">
+                                ✕
+                              </span>
+                              <span>{line}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

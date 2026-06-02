@@ -27,6 +27,7 @@ import {
 } from "../data/termsStorage";
 import CategoryTermsModal from "./CategoryTermsModal";
 import QuotePreview from "./QuotePreview";
+import MasterNavLink from "./MasterNavLink";
 import {
   getPresetKeys,
   computeTotals,
@@ -125,6 +126,8 @@ const buildSampleQuoteData = ({
   // Load inclusions/exclusions per category with legacy support
   const categoryInclusions = {};
   const categoryExclusions = {};
+  const addedInclusions = {};
+  const addedExclusions = {};
   const categoriesList = [
     "STATUATORY",
     "DELIVERY",
@@ -163,6 +166,21 @@ const buildSampleQuoteData = ({
     } else {
       categoryExclusions[cat] = defaultEx;
     }
+
+    // Initialize addedInclusions / addedExclusions
+    if (presetData?.addedInclusions?.[cat]) {
+      addedInclusions[cat] = [...presetData.addedInclusions[cat]];
+    } else {
+      const currentIn = categoryInclusions[cat] || [];
+      addedInclusions[cat] = currentIn.filter((item) => !defaultIn.includes(item));
+    }
+
+    if (presetData?.addedExclusions?.[cat]) {
+      addedExclusions[cat] = [...presetData.addedExclusions[cat]];
+    } else {
+      const currentEx = categoryExclusions[cat] || [];
+      addedExclusions[cat] = currentEx.filter((item) => !defaultEx.includes(item));
+    }
   });
 
   const flatIn = [];
@@ -186,6 +204,8 @@ const buildSampleQuoteData = ({
     exclusions: flatEx,
     categoryInclusions,
     categoryExclusions,
+    addedInclusions,
+    addedExclusions,
     notes: presetData?.notes || "",
   };
 };
@@ -267,6 +287,8 @@ Digital Atelier`);
       quoteExclusions: formData.exclusions,
       quoteCategoryInclusions: formData.categoryInclusions,
       quoteCategoryExclusions: formData.categoryExclusions,
+      quoteAddedInclusions: formData.addedInclusions,
+      quoteAddedExclusions: formData.addedExclusions,
       quoteNotes: formData.notes,
     });
   }, [formData, presetKey]);
@@ -342,7 +364,7 @@ Digital Atelier`);
     setFormData((p) => ({ ...p, [name]: value }));
   };
 
-  const toggleInclusion = (item) => {
+  const toggleInclusion = (item, forcedCat = null) => {
     const categoriesList = [
       "STATUATORY",
       "DELIVERY",
@@ -350,12 +372,15 @@ Digital Atelier`);
       "TECHNICAL",
       "GENERAL",
     ];
-    let foundCat = "GENERAL";
-    for (const cat of categoriesList) {
-      const global = getGlobalTerms(cat);
-      if (global.inclusions.some((t) => t.text === item)) {
-        foundCat = cat;
-        break;
+    let foundCat = forcedCat;
+    if (!foundCat) {
+      foundCat = "GENERAL";
+      for (const cat of categoriesList) {
+        const global = getGlobalTerms(cat);
+        if (global.inclusions.some((t) => t.text === item)) {
+          foundCat = cat;
+          break;
+        }
       }
     }
 
@@ -383,7 +408,7 @@ Digital Atelier`);
     });
   };
 
-  const toggleExclusion = (item) => {
+  const toggleExclusion = (item, forcedCat = null) => {
     const categoriesList = [
       "STATUATORY",
       "DELIVERY",
@@ -391,12 +416,15 @@ Digital Atelier`);
       "TECHNICAL",
       "GENERAL",
     ];
-    let foundCat = "GENERAL";
-    for (const cat of categoriesList) {
-      const global = getGlobalTerms(cat);
-      if (global.exclusions.some((t) => t.text === item)) {
-        foundCat = cat;
-        break;
+    let foundCat = forcedCat;
+    if (!foundCat) {
+      foundCat = "GENERAL";
+      for (const cat of categoriesList) {
+        const global = getGlobalTerms(cat);
+        if (global.exclusions.some((t) => t.text === item)) {
+          foundCat = cat;
+          break;
+        }
       }
     }
 
@@ -473,6 +501,10 @@ Digital Atelier`);
     scopeItems: formData.scopeItems,
     inclusions: formData.inclusions,
     exclusions: formData.exclusions,
+    categoryInclusions: formData.categoryInclusions,
+    categoryExclusions: formData.categoryExclusions,
+    addedInclusions: formData.addedInclusions,
+    addedExclusions: formData.addedExclusions,
     notes: formData.notes,
     createdAt: formData.createdAt,
     subtotal: totals.subtotal,
@@ -832,63 +864,93 @@ Digital Atelier`);
 
                     {isExpanded && (
                       <div className="p-4 border-t border-bordergray/50 grid grid-cols-1 md:grid-cols-2 gap-5 bg-white">
-                        {/* Included */}
+                        {/* Included Column (always left) */}
                         <div>
                           <h4 className="text-[10px] font-bold text-emerald-700 tracking-wider uppercase mb-2">
                             Included
                           </h4>
                           <div className="space-y-2">
-                            {activeIncs.length > 0 ? (
-                              activeIncs.map((item, idx) => (
-                                <label
-                                  key={idx}
-                                  className="flex items-start gap-2 cursor-pointer group font-semibold text-[11px]"
-                                >
-                                  <SQCheckbox
-                                    accent="green"
-                                    checked={true}
-                                    onChange={() => toggleInclusion(item)}
-                                  />
-                                  <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
-                                    {item}
-                                  </span>
-                                </label>
-                              ))
-                            ) : (
-                              <p className="text-[10.5px] text-text-subtle italic">
-                                No inclusions selected.
-                              </p>
-                            )}
+                            {(() => {
+                              const global = getGlobalTerms(cat.id);
+                              const defaultIn = global.inclusions.filter((t) => t.isDefault).map((t) => t.text);
+                              const addedIn = formData.addedInclusions?.[cat.id] || [];
+                              const visibleIn = Array.from(new Set([...defaultIn, ...addedIn]));
+
+                              if (visibleIn.length === 0) {
+                                  return (
+                                    <div className="text-[11.5px] text-text-muted py-2 leading-relaxed">
+                                      No Included Items available.
+                                    </div>
+                                  );
+                              }
+
+                              return visibleIn.map((item, idx) => {
+                                const isChecked = activeIncs.includes(item);
+                                return (
+                                  <div
+                                    key={idx}
+                                    onClick={() => toggleInclusion(item, cat.id)}
+                                    className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
+                                  >
+                                    <div className="pt-0.5 shrink-0">
+                                      <SQCheckbox
+                                        accent="green"
+                                        checked={isChecked}
+                                        onChange={() => {}}
+                                      />
+                                    </div>
+                                    <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
+                                      {item}
+                                    </span>
+                                  </div>
+                                );
+                              });
+                            })()}
                           </div>
                         </div>
 
-                        {/* Not Included */}
+                        {/* Not Included Column (always right) */}
                         <div>
                           <h4 className="text-[10px] font-bold text-red-500 tracking-wider uppercase mb-2">
                             Not Included
                           </h4>
                           <div className="space-y-2">
-                            {activeExcs.length > 0 ? (
-                              activeExcs.map((item, idx) => (
-                                <label
-                                  key={idx}
-                                  className="flex items-start gap-2 cursor-pointer group font-semibold text-[11px]"
-                                >
-                                  <SQCheckbox
-                                    accent="red"
-                                    checked={true}
-                                    onChange={() => toggleExclusion(item)}
-                                  />
-                                  <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
-                                    {item}
-                                  </span>
-                                </label>
-                              ))
-                            ) : (
-                              <p className="text-[10.5px] text-text-subtle italic">
-                                No exclusions selected.
-                              </p>
-                            )}
+                            {(() => {
+                              const global = getGlobalTerms(cat.id);
+                              const defaultEx = global.exclusions.filter((t) => t.isDefault).map((t) => t.text);
+                              const addedEx = formData.addedExclusions?.[cat.id] || [];
+                              const visibleEx = Array.from(new Set([...defaultEx, ...addedEx]));
+
+                              if (visibleEx.length === 0) {
+                                return (
+                                  <div className="text-[11.5px] text-text-muted py-2 leading-relaxed">
+                                    No Not Included Items available.
+                                  </div>
+                                );
+                              }
+
+                              return visibleEx.map((item, idx) => {
+                                const isChecked = activeExcs.includes(item);
+                                return (
+                                  <div
+                                    key={idx}
+                                    onClick={() => toggleExclusion(item, cat.id)}
+                                    className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
+                                  >
+                                    <div className="pt-0.5 shrink-0">
+                                      <SQCheckbox
+                                        accent="red"
+                                        checked={isChecked}
+                                        onChange={() => {}}
+                                      />
+                                    </div>
+                                    <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
+                                      {item}
+                                    </span>
+                                  </div>
+                                );
+                              });
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -1030,15 +1092,30 @@ Digital Atelier`);
           initialExclusions={
             formData.categoryExclusions?.[activeCategoryModal] || []
           }
+          addedInclusions={
+            formData.addedInclusions?.[activeCategoryModal] || []
+          }
+          addedExclusions={
+            formData.addedExclusions?.[activeCategoryModal] || []
+          }
           onApply={(newInclusions, newExclusions) => {
-            const updatedCatIn = {
-              ...formData.categoryInclusions,
-              [activeCategoryModal]: newInclusions,
-            };
-            const updatedCatEx = {
-              ...formData.categoryExclusions,
-              [activeCategoryModal]: newExclusions,
-            };
+            const updatedAddedIn = Array.from(new Set([
+              ...(formData.addedInclusions?.[activeCategoryModal] || []),
+              ...newInclusions
+            ]));
+            const updatedAddedEx = Array.from(new Set([
+              ...(formData.addedExclusions?.[activeCategoryModal] || []),
+              ...newExclusions
+            ]));
+
+            const updatedCatIn = Array.from(new Set([
+              ...(formData.categoryInclusions?.[activeCategoryModal] || []),
+              ...newInclusions,
+            ]));
+            const updatedCatEx = Array.from(new Set([
+              ...(formData.categoryExclusions?.[activeCategoryModal] || []),
+              ...newExclusions,
+            ]));
 
             // Reconstruct flat arrays
             const flatIn = [];
@@ -1051,22 +1128,42 @@ Digital Atelier`);
               "GENERAL",
             ];
             categoriesList.forEach((cat) => {
-              flatIn.push(...(updatedCatIn[cat] || []));
-              flatEx.push(...(updatedCatEx[cat] || []));
+              flatIn.push(...(formData.categoryInclusions?.[cat] || []));
+              flatEx.push(...(formData.categoryExclusions?.[cat] || []));
             });
+            // Replace the updated ones
+            flatIn.push(...newInclusions);
+            flatEx.push(...newExclusions);
+
+            const finalFlatIn = Array.from(new Set(flatIn));
+            const finalFlatEx = Array.from(new Set(flatEx));
 
             setFormData((prev) => ({
               ...prev,
-              inclusions: flatIn,
-              exclusions: flatEx,
-              categoryInclusions: updatedCatIn,
-              categoryExclusions: updatedCatEx,
+              inclusions: finalFlatIn,
+              exclusions: finalFlatEx,
+              categoryInclusions: {
+                ...prev.categoryInclusions,
+                [activeCategoryModal]: updatedCatIn,
+              },
+              categoryExclusions: {
+                ...prev.categoryExclusions,
+                [activeCategoryModal]: updatedCatEx,
+              },
+              addedInclusions: {
+                ...prev.addedInclusions,
+                [activeCategoryModal]: updatedAddedIn,
+              },
+              addedExclusions: {
+                ...prev.addedExclusions,
+                [activeCategoryModal]: updatedAddedEx,
+              },
             }));
 
             // Sync termOptions so they display on the main form
             setTermOptions({
-              inclusions: flatIn,
-              exclusions: flatEx,
+              inclusions: finalFlatIn,
+              exclusions: finalFlatEx,
             });
 
             setActiveCategoryModal(null);
