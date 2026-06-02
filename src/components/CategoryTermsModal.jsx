@@ -229,8 +229,6 @@ const EmptyStateBox = ({ type = "Included" }) => {
 const CategoryTermsModal = ({
   category,
   categoryLabel,
-  initialInclusions = [],
-  initialExclusions = [],
   addedInclusions = [],
   addedExclusions = [],
   onApply,
