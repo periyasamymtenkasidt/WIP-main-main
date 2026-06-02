@@ -1185,6 +1185,7 @@ const LeadEdit = () => {
             name: lead.clientName,
             email: lead.email,
             phone: lead.phone,
+            projectName: lead.location || "Project",
           }}
           defaultPropertyType={lead.propertyType || lead.location}
           presetData={{
@@ -1211,6 +1212,20 @@ const LeadEdit = () => {
             const nextLeads = storedLeads.map((l) => (l.id === lead.id ? updatedLead : l));
             localStorage.setItem("inquiries", JSON.stringify(nextLeads));
             setLead(updatedLead);
+            window.dispatchEvent(new Event("leadDataChanged"));
+          }}
+          onSentEmail={({ to, subject, body, total, quoteId }) => {
+            setActivity(
+              appendActivity(lead.proposalId, {
+                type: "email",
+                to,
+                subject,
+                body,
+                quoteId,
+                total,
+                attachments: [{ name: "Quotation.pdf", size: 154000 }]
+              }),
+            );
             window.dispatchEvent(new Event("leadDataChanged"));
           }}
         />

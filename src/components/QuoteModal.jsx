@@ -749,7 +749,7 @@ const QuoteModal = ({
     };
     setFormData((p) => ({
       ...p,
-      scopeItems: [newRow, ...p.scopeItems],
+      scopeItems: [...p.scopeItems, newRow],
     }));
     setLibraryPickerOpen(false);
   };
@@ -1141,7 +1141,7 @@ const QuoteModal = ({
                             className="rounded-lg border border-border bg-bg-soft/30 p-2 space-y-2"
                           >
                             <div className="flex items-center justify-between text-[10px] text-text-muted font-bold tracking-wide uppercase">
-                              <span>Scope Block: {item._displayCategory}</span>
+                              <span>{item._displayCategory}</span>
                             </div>
                             <div className="grid grid-cols-[1fr_1.5fr_110px_28px] gap-2 items-start">
                               <CategorySelect
@@ -1312,7 +1312,7 @@ const QuoteModal = ({
           <div className="border-t border-border my-5" />
 
           <div className="mb-5">
-            <div className="flex flex-col gap-3 mb-4">
+            <div className="flex justify-between gap-3 mb-4">
               <div className="flex justify-between items-center">
                 <SectionHeader>Terms & Conditions</SectionHeader>
                 {isResend && (

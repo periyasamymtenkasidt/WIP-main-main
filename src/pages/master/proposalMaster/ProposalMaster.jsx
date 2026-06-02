@@ -33,7 +33,6 @@ import {
   Command,
   BarChart3,
   Wallet,
-  ArrowUpDown,
   AlertTriangle,
   Info,
   Wand2,
@@ -360,7 +359,7 @@ const ProposalMaster = () => {
       : blankScope();
     setConfigField((cfg) => ({
       ...cfg,
-      scopeItems: [newRow, ...cfg.scopeItems],
+      scopeItems: [...cfg.scopeItems, newRow],
     }));
     setExpanded((p) => ({
       ...p,
@@ -398,7 +397,7 @@ const ProposalMaster = () => {
 
       setConfigField((cfg) => ({
         ...cfg,
-        scopeItems: [...newRows, ...cfg.scopeItems],
+        scopeItems: [...cfg.scopeItems, ...newRows],
       }));
       showToast(`Added ${newRows.length} scope item(s)`, "success");
     } else {
@@ -455,7 +454,7 @@ const ProposalMaster = () => {
         };
         setConfigField((cfg) => ({
           ...cfg,
-          scopeItems: [newRow, ...cfg.scopeItems],
+          scopeItems: [...cfg.scopeItems, newRow],
         }));
         showToast(`Added "${area || "scope"}"`, "success");
       }
@@ -684,23 +683,11 @@ const ProposalMaster = () => {
 
   const sortedScope = useMemo(() => {
     if (!activeConfig) return [];
-    const copy = (activeConfig.scopeItems || []).map((item, idx) => ({
+    return (activeConfig.scopeItems || []).map((item, idx) => ({
       item,
       idx,
     }));
-    if (sortBy === "amount-desc") {
-      copy.sort(
-        (a, b) => (Number(b.item.amount) || 0) - (Number(a.item.amount) || 0),
-      );
-    } else if (sortBy === "amount-asc") {
-      copy.sort(
-        (a, b) => (Number(a.item.amount) || 0) - (Number(b.item.amount) || 0),
-      );
-    } else if (sortBy === "area") {
-      copy.sort((a, b) => (a.item.area || "").localeCompare(b.item.area || ""));
-    }
-    return copy;
-  }, [activeConfig, sortBy]);
+  }, [activeConfig]);
 
   const namedOriginalItems = useMemo(() => {
     return assignCategoryNames(activeConfig?.scopeItems || []);
@@ -1241,19 +1228,7 @@ const ProposalMaster = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1 bg-bg-soft border border-bordergray rounded-lg px-2 py-1">
-                    <ArrowUpDown size={11} className="text-text-subtle" />
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                      className="text-[11px] font-semibold text-text-muted bg-transparent focus:outline-none cursor-pointer"
-                    >
-                      <option value="order">Manual order</option>
-                      <option value="amount-desc">Cost: high → low</option>
-                      <option value="amount-asc">Cost: low → high</option>
-                      <option value="area">Area name (A–Z)</option>
-                    </select>
-                  </div>
+
                   <button
                     type="button"
                     onClick={() => setPreviewOpen(true)}

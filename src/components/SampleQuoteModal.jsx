@@ -14,6 +14,10 @@ import {
   FileText,
   Plus,
   X,
+  Mail,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 import Modal from "./Modal";
 import InputField from "./InputField";
@@ -202,6 +206,7 @@ const SampleQuoteModal = ({
   presetData,
   onClose,
   onSave,
+  onSentEmail,
 }) => {
   const [presetKey] = useState(() =>
     inferSQPresetKey(presetData),
@@ -214,6 +219,34 @@ const SampleQuoteModal = ({
       presetData,
     }),
   );
+
+  // Email modal state
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [emailTo, setEmailTo] = useState(recipient?.email || "");
+  const [emailCC, setEmailCC] = useState("");
+  const [emailSubject, setEmailSubject] = useState(`Quotation - ${recipient?.projectName || defaultPropertyType || "Project"}`);
+  const [emailBody, setEmailBody] = useState(`Dear Customer,
+
+Please find the attached quotation for your project.
+
+Kindly review the quotation and let us know if you have any questions.
+
+Thank you.
+
+Regards,
+Digital Atelier`);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type, id: Date.now() });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const onSaveRef = useRef(onSave);
   useEffect(() => {
@@ -239,7 +272,7 @@ const SampleQuoteModal = ({
   }, [formData, presetKey]);
 
   // Terms
-  const [ setTermOptions] = useState(() => {
+  const [termOptions, setTermOptions] = useState(() => {
     const defaults = getDefaultTermStrings();
     return {
       inclusions: Array.from(
@@ -415,7 +448,7 @@ const SampleQuoteModal = ({
     };
     setFormData((p) => ({
       ...p,
-      scopeItems: [newRow, ...p.scopeItems],
+      scopeItems: [...p.scopeItems, newRow],
     }));
     setLibraryPickerOpen(false);
   };
@@ -452,6 +485,35 @@ const SampleQuoteModal = ({
 
   const previewQuote = buildPreviewQuote();
 
+  const handleSendEmailSubmit = async (e) => {
+    e.preventDefault();
+    if (!emailTo || !emailSubject || !emailBody) {
+      showToast("To Email, Subject, and Message Body are required", "error");
+      return;
+    }
+    
+    setIsSendingEmail(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      
+      onSentEmail?.({
+        to: emailTo,
+        cc: emailCC,
+        subject: emailSubject,
+        body: emailBody,
+        total: totals.grandTotal,
+        quoteId: formData.quoteId,
+      });
+
+      showToast("Quotation emailed successfully.", "success");
+      setShowEmailForm(false);
+    } catch (err) {
+      showToast("Failed to send email. Please try again.", "error");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   const footer = (
     <div className="flex flex-wrap justify-between items-center gap-3 modal-no-print">
       <button
@@ -468,6 +530,13 @@ const SampleQuoteModal = ({
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-sm font-medium text-text hover:bg-bg-soft transition-all"
         >
           <Printer size={14} /> Print / Save PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowEmailForm(true)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-select-blue hover:bg-select-blue/90 text-sm font-semibold text-white shadow-sm transition-all cursor-pointer"
+        >
+          <Mail size={14} /> Send Email
         </button>
       </div>
     </div>
@@ -602,7 +671,7 @@ const SampleQuoteModal = ({
                             className="rounded-lg border border-border bg-bg-soft/30 p-2 space-y-2"
                           >
                             <div className="flex items-center justify-between text-[10px] text-text-muted font-bold tracking-wide uppercase">
-                              <span>Scope Block: {item._displayCategory}</span>
+                              <span>{item._displayCategory}</span>
                             </div>
                             <div className="grid grid-cols-[1fr_1.5fr_110px_28px] gap-2 items-start">
                               <CategorySelect
@@ -696,7 +765,7 @@ const SampleQuoteModal = ({
 
           {/* ── Terms & Conditions (matches Proposal Form) ── */}
           <div className="mb-5">
-            <div className="flex flex-col gap-3 mb-4">
+            <div className="flex justify-between gap-3 mb-4">
               <div className="flex justify-between items-center">
                 <SectionHeader>Terms & Conditions</SectionHeader>
               </div>
@@ -1009,7 +1078,138 @@ const SampleQuoteModal = ({
           }}
         />
       )}
+
+      {showEmailForm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9999] animate-fade-in p-4 modal-no-print">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-bordergray transform scale-100 transition-all duration-300">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 bg-bg-soft border-b border-bordergray">
+              <div>
+                <h3 className="text-[14px] font-bold text-textcolor">Send Quotation Email</h3>
+                <p className="text-[10px] text-text-muted mt-0.5">Directly email the generated quotation PDF</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmailForm(false)}
+                className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-bordergray transition-all cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSendEmailSubmit}>
+              <div className="p-6 space-y-4">
+                <InputField
+                  name="emailTo"
+                  label="To Email *"
+                  type="email"
+                  required
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="recipient@example.com"
+                />
+                <InputField
+                  name="emailCC"
+                  label="CC Email (optional)"
+                  type="email"
+                  value={emailCC}
+                  onChange={(e) => setEmailCC(e.target.value)}
+                  placeholder="cc@example.com"
+                />
+                <InputField
+                  name="emailSubject"
+                  label="Subject *"
+                  type="text"
+                  required
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Email subject line"
+                />
+                <div>
+                  <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                    Message Body *
+                  </label>
+                  <textarea
+                    required
+                    rows={6}
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
+                    className="w-full rounded-xl border border-bordergray px-3.5 py-2.5 text-[12.5px] text-textcolor placeholder:text-text-subtle focus:outline-none focus:border-select-blue focus:ring-1 focus:ring-select-blue/20 transition-all resize-none"
+                    placeholder="Enter email content..."
+                  />
+                </div>
+                {/* Attached PDF Display */}
+                <div>
+                  <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1.5">
+                    Attachment
+                  </label>
+                  <div className="flex items-center gap-2.5 p-3 rounded-xl border border-bordergray bg-bg-soft">
+                    <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                      <FileText size={16} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-bold text-textcolor truncate">Quotation.pdf</p>
+                      <p className="text-[10px] text-text-muted">PDF Document · auto-generated</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-3 px-6 py-4 bg-bg-soft border-t border-bordergray">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailForm(false)}
+                  disabled={isSendingEmail}
+                  className="px-4 py-2 bg-white border border-bordergray rounded-xl text-textcolor hover:bg-bg-soft text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSendingEmail}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-select-blue hover:bg-select-blue/90 rounded-xl text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isSendingEmail ? "Sending..." : "Send Email"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <Toast key={toast.id} toast={toast} onClose={() => setToast(null)} />
+      )}
     </Modal>
+  );
+};
+
+const Toast = ({ toast, onClose }) => {
+  const variants = {
+    success: { bg: "bg-emerald-500", icon: <CheckCircle2 size={14} /> },
+    error: { bg: "bg-red-500", icon: <AlertTriangle size={14} /> },
+    info: { bg: "bg-select-blue", icon: <Info size={14} /> },
+  };
+  const v = variants[toast.type] || variants.info;
+  return (
+    <div className="fixed top-6 right-6 z-[10000] animate-[slideIn_0.2s_ease-out]">
+      <div
+        className={`${v.bg} text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-2.5 min-w-[260px] max-w-md`}
+      >
+        <span className="shrink-0">{v.icon}</span>
+        <p className="text-[12px] font-medium flex-1">{toast.message}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-white/80 hover:text-white shrink-0"
+          title="Dismiss"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </div>
   );
 };
 

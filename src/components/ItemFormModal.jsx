@@ -18,6 +18,7 @@ import InputField from "./InputField";
 import CategorySelect from "./CategorySelect";
 import { getScheduleConfig, getRoomDefaultDays } from "../data/scheduleConfig";
 import { roomColor } from "../data/categoryColors";
+import { assignCategoryNames } from "../utils/scopeNaming";
 
 const itemFormSchema = yup.object().shape({
   description: yup
@@ -118,13 +119,11 @@ const ItemFormModal = ({
 
   const namedDrafts = useMemo(() => {
     if (!roomCategoryMode) return drafts;
-    const counts = {};
-    return drafts.map((d) => {
-      const cat = d.description || "Unassigned";
-      counts[cat] = (counts[cat] || 0) + 1;
-      const displayName = counts[cat] === 1 ? cat : `${cat} ${counts[cat]}`;
-      return { ...d, _displayCategory: displayName };
+    const mappedForNaming = drafts.map((d) => {
+      d.area = d.description;
+      return d;
     });
+    return assignCategoryNames(mappedForNaming);
   }, [drafts, roomCategoryMode]);
 
   const groupedDrafts = useMemo(() => {

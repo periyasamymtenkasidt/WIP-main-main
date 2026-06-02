@@ -13,6 +13,7 @@ import {
   FiFileText,
 } from "react-icons/fi";
 import { ClientTableData } from "../../data/ClientTableData";
+import { PAYMENT_MILESTONES } from "../../data/MilestoneConfig";
 import EditClientForm from "./EditClientForm";
 import QuoteModal from "../../components/QuoteModal";
 import Client from "../../assets/images/Client_avatar.png";
@@ -661,10 +662,16 @@ const ClientProfile = () => {
                       (s, m) => s + (m.total ?? m.base ?? m.amount ?? 0),
                       0,
                     );
-                    const progressPct =
-                      grandTotal > 0
-                        ? Math.round((paidTotal / grandTotal) * 100)
-                        : 0;
+                    const completedIds = new Set();
+                    let progress = 0;
+                    milestones.forEach((m) => {
+                      if (m.status === "paid" && !completedIds.has(m.id)) {
+                        completedIds.add(m.id);
+                        const config = PAYMENT_MILESTONES.find((pm) => pm.id === m.id) || m;
+                        progress += (config.pct || 0);
+                      }
+                    });
+                    const progressPct = Math.min(progress, 100);
 
                     return (
                       <>

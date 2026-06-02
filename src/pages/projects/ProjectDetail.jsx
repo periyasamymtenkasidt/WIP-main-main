@@ -561,14 +561,16 @@ const ProjectDetail = () => {
       ].find((c) => c.clientID === lead.convertedClientID)
     : null;
 
-  const totalProjectValue =
-    client?.projectValue || milestones.reduce((s, m) => s + (m.total || 0), 0);
-  const collected = milestones
-    .filter((m) => m.status === "paid")
-    .reduce((s, m) => s + (m.total || 0), 0);
-  const collectedPct = totalProjectValue
-    ? Math.round((collected / totalProjectValue) * 100)
-    : 0;
+  const completedIds = new Set();
+  let progress = 0;
+  milestones.forEach((m) => {
+    if (m.status === "paid" && !completedIds.has(m.id)) {
+      completedIds.add(m.id);
+      const config = PAYMENT_MILESTONES.find((pm) => pm.id === m.id) || m;
+      progress += (config.pct || 0);
+    }
+  });
+  const collectedPct = Math.min(progress, 100);
 
   return (
     <div className="bg-overallbg p-6 font-sans h-full overflow-y-scroll">
