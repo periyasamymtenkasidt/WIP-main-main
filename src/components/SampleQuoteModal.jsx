@@ -1099,23 +1099,21 @@ Digital Atelier`);
             formData.addedExclusions?.[activeCategoryModal] || []
           }
           onApply={(newInclusions, newExclusions) => {
-            const updatedAddedIn = Array.from(new Set([
-              ...(formData.addedInclusions?.[activeCategoryModal] || []),
-              ...newInclusions
-            ]));
-            const updatedAddedEx = Array.from(new Set([
-              ...(formData.addedExclusions?.[activeCategoryModal] || []),
-              ...newExclusions
-            ]));
+            const global = getGlobalTerms(activeCategoryModal);
+            const defaultInTexts = global.inclusions.filter((t) => t.isDefault).map((t) => t.text);
+            const defaultExTexts = global.exclusions.filter((t) => t.isDefault).map((t) => t.text);
 
-            const updatedCatIn = Array.from(new Set([
-              ...(formData.categoryInclusions?.[activeCategoryModal] || []),
-              ...newInclusions,
-            ]));
-            const updatedCatEx = Array.from(new Set([
-              ...(formData.categoryExclusions?.[activeCategoryModal] || []),
-              ...newExclusions,
-            ]));
+            const prevCatIn = formData.categoryInclusions?.[activeCategoryModal] || [];
+            const prevCatEx = formData.categoryExclusions?.[activeCategoryModal] || [];
+
+            const currentSelectedDefaultsIn = prevCatIn.filter((t) => defaultInTexts.includes(t));
+            const currentSelectedDefaultsEx = prevCatEx.filter((t) => defaultExTexts.includes(t));
+
+            const updatedCatIn = Array.from(new Set([...currentSelectedDefaultsIn, ...newInclusions]));
+            const updatedCatEx = Array.from(new Set([...currentSelectedDefaultsEx, ...newExclusions]));
+
+            const updatedAddedIn = newInclusions;
+            const updatedAddedEx = newExclusions;
 
             // Reconstruct flat arrays
             const flatIn = [];
@@ -1128,12 +1126,14 @@ Digital Atelier`);
               "GENERAL",
             ];
             categoriesList.forEach((cat) => {
-              flatIn.push(...(formData.categoryInclusions?.[cat] || []));
-              flatEx.push(...(formData.categoryExclusions?.[cat] || []));
+              if (cat === activeCategoryModal) {
+                flatIn.push(...updatedCatIn);
+                flatEx.push(...updatedCatEx);
+              } else {
+                flatIn.push(...(formData.categoryInclusions?.[cat] || []));
+                flatEx.push(...(formData.categoryExclusions?.[cat] || []));
+              }
             });
-            // Replace the updated ones
-            flatIn.push(...newInclusions);
-            flatEx.push(...newExclusions);
 
             const finalFlatIn = Array.from(new Set(flatIn));
             const finalFlatEx = Array.from(new Set(flatEx));
