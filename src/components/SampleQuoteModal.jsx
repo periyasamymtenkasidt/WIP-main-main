@@ -884,27 +884,34 @@ Digital Atelier`);
                                   );
                               }
 
-                              return visibleIn.map((item, idx) => {
-                                const isChecked = activeIncs.includes(item);
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => toggleInclusion(item, cat.id)}
-                                    className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
-                                  >
-                                    <div className="pt-0.5 shrink-0">
-                                      <SQCheckbox
-                                        accent="green"
-                                        checked={isChecked}
-                                        onChange={() => {}}
-                                      />
-                                    </div>
-                                    <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
-                                      {item}
-                                    </span>
-                                  </div>
-                                );
-                              });
+                              return (
+                                <div
+                                  style={{ maxHeight: '152px', scrollBehavior: 'smooth' }}
+                                  className="space-y-2 overflow-y-auto scroll-hidden-bar scroll-smooth"
+                                >
+                                  {visibleIn.map((item, idx) => {
+                                    const isChecked = activeIncs.includes(item);
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => toggleInclusion(item, cat.id)}
+                                        className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
+                                      >
+                                        <div className="pt-0.5 shrink-0">
+                                          <SQCheckbox
+                                            accent="green"
+                                            checked={isChecked}
+                                            onChange={() => {}}
+                                          />
+                                        </div>
+                                        <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
+                                          {item}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
                             })()}
                           </div>
                         </div>
@@ -929,27 +936,34 @@ Digital Atelier`);
                                 );
                               }
 
-                              return visibleEx.map((item, idx) => {
-                                const isChecked = activeExcs.includes(item);
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => toggleExclusion(item, cat.id)}
-                                    className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
-                                  >
-                                    <div className="pt-0.5 shrink-0">
-                                      <SQCheckbox
-                                        accent="red"
-                                        checked={isChecked}
-                                        onChange={() => {}}
-                                      />
-                                    </div>
-                                    <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
-                                      {item}
-                                    </span>
-                                  </div>
-                                );
-                              });
+                              return (
+                                <div
+                                  style={{ maxHeight: '152px', scrollBehavior: 'smooth' }}
+                                  className="space-y-2 overflow-y-auto scroll-hidden-bar scroll-smooth"
+                                >
+                                  {visibleEx.map((item, idx) => {
+                                    const isChecked = activeExcs.includes(item);
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => toggleExclusion(item, cat.id)}
+                                        className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
+                                      >
+                                        <div className="pt-0.5 shrink-0">
+                                          <SQCheckbox
+                                            accent="red"
+                                            checked={isChecked}
+                                            onChange={() => {}}
+                                          />
+                                        </div>
+                                        <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
+                                          {item}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
                             })()}
                           </div>
                         </div>
