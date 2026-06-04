@@ -339,9 +339,9 @@ const QuotePreview = ({ quote }) => {
         const categoriesList = [
           { id: "STATUATORY", label: "Statutory" },
           { id: "DELIVERY", label: "Delivery" },
-          { id: "TECHNICAL", label: "Commercial" },
+          { id: "TECHNICAL", label: "Technical" },
           { id: "PAYMENTS", label: "Payment" },
-          { id: "GENERAL", label: "Warranty" },
+          { id: "GENERAL", label: "General" },
         ];
 
         const categoriesToRender = categoriesList

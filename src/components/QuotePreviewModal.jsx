@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Download, Loader2 } from "lucide-react";
 import Modal from "./Modal";
 import QuotePreview from "./QuotePreview";
@@ -9,11 +9,12 @@ import { downloadQuoteAsImage } from "../utils/downloadQuoteImage";
 // neither of those should let the user edit or resend.
 const QuotePreviewModal = ({ quote, fileName, onClose }) => {
   const [downloading, setDownloading] = useState(false);
+  const previewRef = useRef(null);
 
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      await downloadQuoteAsImage(quote, fileName);
+      await downloadQuoteAsImage(quote, fileName, previewRef.current);
     } finally {
       setDownloading(false);
     }
@@ -64,7 +65,7 @@ const QuotePreviewModal = ({ quote, fileName, onClose }) => {
       footer={footer}
       maxWidth="max-w-[760px]"
     >
-      <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
+      <div ref={previewRef} className="rounded-xl border border-border bg-white p-6 shadow-sm">
         {quote ? (
           <QuotePreview quote={quote} />
         ) : (

@@ -513,7 +513,62 @@ Digital Atelier`);
     isSampleQuote: true,
   });
 
-  const handlePrint = () => window.print();
+  const handlePrint = async () => {
+    try {
+      const quote = buildPreviewQuote();
+      const { createRoot } = await import("react-dom/client");
+      const { flushSync } = await import("react-dom");
+
+      // 1. Create a temporary container directly on body
+      let printContainer = document.getElementById("quote-print-temp-container");
+      if (!printContainer) {
+        printContainer = document.createElement("div");
+        printContainer.id = "quote-print-temp-container";
+        document.body.appendChild(printContainer);
+      }
+
+      // 2. Render QuotePreview into the temporary container
+      const root = createRoot(printContainer);
+      flushSync(() => {
+        root.render(<QuotePreview quote={quote} />);
+      });
+
+      // 3. Set printing class on body to isolate the container and hide the rest
+      document.body.classList.add("printing-quote-mode");
+
+      // 4. Set up safe, once-callable cleanup after print dialog closes
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        
+        try {
+          document.body.classList.remove("printing-quote-mode");
+        } catch (e) {}
+        try {
+          window.removeEventListener("afterprint", cleanup);
+        } catch (e) {}
+        try {
+          root.unmount();
+        } catch (e) {}
+        try {
+          printContainer.remove();
+        } catch (e) {}
+      };
+
+      // Register listener BEFORE triggering print dialog to avoid race conditions
+      window.addEventListener("afterprint", cleanup);
+
+      // 5. Trigger print
+      window.print();
+
+      // 6. Synchronous fallback: run cleanup immediately after print dialog returns (blocking call)
+      cleanup();
+    } catch (err) {
+      console.error("[SampleQuoteModal] print failed, falling back to basic print:", err);
+      window.print();
+    }
+  };
 
   const previewQuote = buildPreviewQuote();
 
@@ -535,6 +590,10 @@ Digital Atelier`);
         body: emailBody,
         total: totals.grandTotal,
         quoteId: formData.quoteId,
+        quote: {
+          ...buildPreviewQuote(),
+          sentAt: new Date().toISOString(),
+        },
       });
 
       showToast("Quotation emailed successfully.", "success");
@@ -884,27 +943,34 @@ Digital Atelier`);
                                   );
                               }
 
-                              return visibleIn.map((item, idx) => {
-                                const isChecked = activeIncs.includes(item);
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => toggleInclusion(item, cat.id)}
-                                    className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
-                                  >
-                                    <div className="pt-0.5 shrink-0">
-                                      <SQCheckbox
-                                        accent="green"
-                                        checked={isChecked}
-                                        onChange={() => {}}
-                                      />
-                                    </div>
-                                    <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
-                                      {item}
-                                    </span>
-                                  </div>
-                                );
-                              });
+                              return (
+                                <div
+                                  style={{ maxHeight: '152px', scrollBehavior: 'smooth' }}
+                                  className="space-y-2 overflow-y-auto scroll-hidden-bar scroll-smooth"
+                                >
+                                  {visibleIn.map((item, idx) => {
+                                    const isChecked = activeIncs.includes(item);
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => toggleInclusion(item, cat.id)}
+                                        className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
+                                      >
+                                        <div className="pt-0.5 shrink-0">
+                                          <SQCheckbox
+                                            accent="green"
+                                            checked={isChecked}
+                                            onChange={() => {}}
+                                          />
+                                        </div>
+                                        <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
+                                          {item}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
                             })()}
                           </div>
                         </div>
@@ -929,27 +995,34 @@ Digital Atelier`);
                                 );
                               }
 
-                              return visibleEx.map((item, idx) => {
-                                const isChecked = activeExcs.includes(item);
-                                return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => toggleExclusion(item, cat.id)}
-                                    className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
-                                  >
-                                    <div className="pt-0.5 shrink-0">
-                                      <SQCheckbox
-                                        accent="red"
-                                        checked={isChecked}
-                                        onChange={() => {}}
-                                      />
-                                    </div>
-                                    <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
-                                      {item}
-                                    </span>
-                                  </div>
-                                );
-                              });
+                              return (
+                                <div
+                                  style={{ maxHeight: '152px', scrollBehavior: 'smooth' }}
+                                  className="space-y-2 overflow-y-auto scroll-hidden-bar scroll-smooth"
+                                >
+                                  {visibleEx.map((item, idx) => {
+                                    const isChecked = activeExcs.includes(item);
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => toggleExclusion(item, cat.id)}
+                                        className="flex items-start gap-2.5 cursor-pointer group py-1 px-1.5 rounded hover:bg-bg-soft transition-all select-none text-left"
+                                      >
+                                        <div className="pt-0.5 shrink-0">
+                                          <SQCheckbox
+                                            accent="red"
+                                            checked={isChecked}
+                                            onChange={() => {}}
+                                          />
+                                        </div>
+                                        <span className="text-[11.5px] text-text-muted group-hover:text-textcolor transition-colors leading-tight font-medium">
+                                          {item}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
                             })()}
                           </div>
                         </div>

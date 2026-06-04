@@ -147,3 +147,36 @@
     margin: 12mm;
   }
 }
+
+/* Custom print-mode styling to isolate only the target quote */
+body.printing-quote-mode > #root {
+  display: none !important;
+}
+
+#quote-print-temp-container {
+  display: none;
+}
+
+@media print {
+  /* Override any modal-induced overflow hidden or height limits on print */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  body.printing-quote-mode #quote-print-temp-container,
+  body.printing-quote-mode #quote-print-temp-container * {
+    visibility: visible !important;
+  }
+
+  body.printing-quote-mode #quote-print-temp-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff;
+    padding: 0;
+    margin: 0;
+  }
+}

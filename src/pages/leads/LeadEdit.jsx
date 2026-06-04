@@ -1134,6 +1134,10 @@ const LeadEdit = () => {
             scopeItems: lead.quoteScopeItems,
             inclusions: lead.quoteInclusions,
             exclusions: lead.quoteExclusions,
+            categoryInclusions: lead.quoteCategoryInclusions,
+            categoryExclusions: lead.quoteCategoryExclusions,
+            addedInclusions: lead.quoteAddedInclusions,
+            addedExclusions: lead.quoteAddedExclusions,
             validityDays: lead.quoteValidityDays,
             notes: lead.quoteNotes,
           }}
@@ -1196,6 +1200,10 @@ const LeadEdit = () => {
             scopeItems: lead.quoteScopeItems,
             inclusions: lead.quoteInclusions,
             exclusions: lead.quoteExclusions,
+            categoryInclusions: lead.quoteCategoryInclusions,
+            categoryExclusions: lead.quoteCategoryExclusions,
+            addedInclusions: lead.quoteAddedInclusions,
+            addedExclusions: lead.quoteAddedExclusions,
           }}
           onClose={() => setShowSampleQuote(false)}
           onSave={(updates) => {
@@ -1206,15 +1214,32 @@ const LeadEdit = () => {
               quoteScopeItems: updates.quoteScopeItems,
               quoteInclusions: updates.quoteInclusions,
               quoteExclusions: updates.quoteExclusions,
+              quoteCategoryInclusions: updates.quoteCategoryInclusions,
+              quoteCategoryExclusions: updates.quoteCategoryExclusions,
+              quoteAddedInclusions: updates.quoteAddedInclusions,
+              quoteAddedExclusions: updates.quoteAddedExclusions,
               quoteNotes: updates.quoteNotes,
             };
-            const storedLeads = JSON.parse(localStorage.getItem("inquiries") || "[]");
-            const nextLeads = storedLeads.map((l) => (l.id === lead.id ? updatedLead : l));
-            localStorage.setItem("inquiries", JSON.stringify(nextLeads));
+            const saved = localStorage.getItem("newLeadsData");
+            const newLeads = saved ? JSON.parse(saved) : [];
+            const filtered = newLeads.filter((l) => l.proposalId !== lead.proposalId);
+            localStorage.setItem(
+              "newLeadsData",
+              JSON.stringify([updatedLead, ...filtered]),
+            );
             setLead(updatedLead);
             window.dispatchEvent(new Event("leadDataChanged"));
           }}
-          onSentEmail={({ to, subject, body, total, quoteId }) => {
+          onSentEmail={({ to, subject, body, total, quoteId, quote }) => {
+            // Persist the quote snapshot into the Documents section —
+            // identical to how the Proposal Form saves on send.
+            if (quote) {
+              saveQuoteDocument(lead.proposalId, {
+                ...quote,
+                recipientName: lead.clientName,
+                recipientEmail: to,
+              });
+            }
             setActivity(
               appendActivity(lead.proposalId, {
                 type: "email",

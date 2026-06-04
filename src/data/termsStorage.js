@@ -139,3 +139,115 @@ export const getNonDefaultTermStrings = () => {
 
   return { inclusions, exclusions };
 };
+
+// ── Default Seed Data ─────────────────────────────────────────────────────
+// Pre-defined terms that are inserted into the master table on first run.
+// Each entry is { text, isDefault: true } so it auto-flows into quotes.
+
+const SEED_TERMS = {
+  STATUATORY: {
+    inclusions: [
+      { text: "GST calculations shall be applied as per prevailing Government norms.", isDefault: true },
+      { text: "Statutory compliance documentation shall be provided wherever applicable.", isDefault: true },
+      { text: "Tax details shall be reflected in billing documents.", isDefault: true },
+    ],
+    exclusions: [
+      { text: "GST: Extra @ 18%, if any additional or difference in tax rate at the time of billing, it will be applicable as per Government norms.", isDefault: true },
+      { text: "Design Fees: Default statutory term.", isDefault: true },
+      { text: "Site Travel Expenses by Architects: Default statutory term.", isDefault: true },
+    ],
+  },
+  DELIVERY: {
+    inclusions: [
+      { text: "Work completion schedule shall be communicated after order confirmation.", isDefault: true },
+      { text: "Delivery planning shall be coordinated through project scheduling.", isDefault: true },
+      { text: "Installation dates shall be finalized with client approval.", isDefault: true },
+    ],
+    exclusions: [
+      { text: "Delays caused by site readiness issues are excluded.", isDefault: true },
+      { text: "Delays due to pending client approvals are excluded.", isDefault: true },
+      { text: "Force majeure related schedule changes are excluded.", isDefault: true },
+    ],
+  },
+  PAYMENTS: {
+    inclusions: [
+      { text: "Payment milestones shall be communicated along with project approval.", isDefault: true },
+      { text: "Work status updates shall be provided against received payments.", isDefault: true },
+      { text: "Account statements and due payment updates shall be shared periodically.", isDefault: true },
+    ],
+    exclusions: [
+      { text: "Delayed client payments affecting project timelines are excluded.", isDefault: true },
+      { text: "Banking and transaction charges are excluded.", isDefault: true },
+      { text: "Additional scope changes are excluded from approved payment milestones.", isDefault: true },
+    ],
+  },
+  TECHNICAL: {
+    inclusions: [
+      { text: "Fabrication shall be executed as per approved drawings and specifications.", isDefault: true },
+      { text: "Site work and installation activities are included as per project scope.", isDefault: true },
+      { text: "Standard priming and finishing processes are included.", isDefault: true },
+    ],
+    exclusions: [
+      { text: "Wood, glass, upholstery and specialty finishes are excluded unless specifically mentioned.", isDefault: true },
+      { text: "Worker accommodation arrangements at site are excluded.", isDefault: true },
+      { text: "Client-requested modifications after fabrication completion are excluded.", isDefault: true },
+    ],
+  },
+  GENERAL: {
+    inclusions: [
+      { text: "Quotation validity shall be as specified in the quotation document.", isDefault: true },
+      { text: "Applicable warranty coverage shall be provided as per company policy.", isDefault: true },
+      { text: "Clerical errors may be corrected through revised documentation.", isDefault: true },
+    ],
+    exclusions: [
+      { text: "Cancellation recovery charges after project commencement are excluded from refunds.", isDefault: true },
+      { text: "Warranty does not cover negligence, misuse or accidental damages.", isDefault: true },
+      { text: "Disputes outside the agreed jurisdiction are excluded.", isDefault: true },
+    ],
+  },
+};
+
+const SEED_FLAG = "globalTerms_seeded";
+
+/**
+ * Insert default terms into the master table exactly once.
+ *
+ * Rules:
+ *  - Runs only when the SEED_FLAG is absent from localStorage.
+ *  - For each category, seeds only if the category currently has zero entries
+ *    (preserves any user-created records).
+ *  - After seeding, sets the flag so it never runs again.
+ */
+export const seedDefaultTerms = () => {
+  try {
+    // Explicitly check if the new statutory items are seeded. If not, seed them.
+    const statSeededFlag = "statutoryTerms_seeded_v4";
+    if (!localStorage.getItem(statSeededFlag)) {
+      saveGlobalTerms("STATUATORY", {
+        inclusions: SEED_TERMS.STATUATORY.inclusions.map((t) => ({ ...t })),
+        exclusions: SEED_TERMS.STATUATORY.exclusions.map((t) => ({ ...t })),
+      });
+      localStorage.setItem(statSeededFlag, "1");
+    }
+
+    if (localStorage.getItem(SEED_FLAG)) return; // already seeded
+
+    CATEGORIES.forEach((cat) => {
+      const existing = getGlobalTerms(cat);
+      const hasData =
+        (existing.inclusions && existing.inclusions.length > 0) ||
+        (existing.exclusions && existing.exclusions.length > 0);
+
+      if (!hasData && SEED_TERMS[cat]) {
+        saveGlobalTerms(cat, {
+          inclusions: SEED_TERMS[cat].inclusions.map((t) => ({ ...t })),
+          exclusions: SEED_TERMS[cat].exclusions.map((t) => ({ ...t })),
+        });
+      }
+    });
+
+    localStorage.setItem(SEED_FLAG, "1");
+  } catch (e) {
+    console.error("Error seeding default terms", e);
+  }
+};
