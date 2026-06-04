@@ -48,9 +48,10 @@ import {
   DEFAULT_PRESETS,
 } from "../../../data/QuotePresets";
 import { formatAmount } from "../../../utils/formatAmount";
-import { validateSizeRangeInput } from "../../../utils/sizeRangeValidation";
-import { assignCategoryNames } from "../../../utils/scopeNaming";
+import { validateSizeRangeInput, formatSizeRange } from "../../../utils/sizeRangeValidation";
+import { assignCategoryNames, addScopeItemsWithDuplicateCheck, getCategoryKey, getHeadingCategoryKey } from "../../../utils/scopeNaming";
 import ItemFormModal from "../../../components/ItemFormModal";
+import DestinationPromptModal from "../../../components/DestinationPromptModal";
 import Modal from "../../../components/Modal";
 import { getRoomDefaultDays, getScheduleConfig } from "../../../data/scheduleConfig";
 import { computeLibraryItemAmount } from "../../../data/itemLibrary";
@@ -242,6 +243,16 @@ const ProposalMaster = () => {
   const toggleGroup = (room) => setExpandedGroups((p) => ({ ...p, [room]: p[room] === false ? true : (p[room] === true ? false : false) }));
   const isGroupOpen = (room) => expandedGroups[room] !== false; // default open
 
+  // Destination prompt state for quick-add scope chips
+  const [destPrompt, setDestPrompt] = useState({
+    isOpen: false,
+    itemName: "",
+    itemCategory: "",
+    existingHeadings: [],
+    headingsWithItem: [],
+    pendingPreset: null,
+  });
+
   const openAddScope = () => {
     setEditingScopeIdx(null);
     setScopeFormOpen(true);
@@ -254,6 +265,8 @@ const ProposalMaster = () => {
   // Map a scope row → the flat form shape ItemFormModal expects. The lump-sum
   // amount is fed in as the rate (qty 0 → amount falls back to rate on save).
   const scopeRowToForm = (item) => ({
+    heading: item.heading || item.area || "",
+    itemName: item.itemName || item.description || "",
     description: item.area || "",
     spec: item.description || "",
     length: item.length ?? 0,
@@ -292,6 +305,7 @@ const ProposalMaster = () => {
       setIsInitial(false);
       return;
     }
+    saveMaster(master);
     setHasChanges(true);
   }, [master]);
 
@@ -337,12 +351,40 @@ const ProposalMaster = () => {
   };
 
   const updateScope = (idx, key, value) => {
-    setConfigField((cfg) => ({
-      ...cfg,
-      scopeItems: cfg.scopeItems.map((s, i) =>
-        i === idx ? { ...s, [key]: value } : s,
-      ),
-    }));
+    setConfigField((cfg) => {
+      // Check for duplicate heading if changing the area/heading field
+      if (key === "area") {
+        const item = cfg.scopeItems[idx];
+        const newHeading = value.trim().toUpperCase();
+        const duplicateExists = cfg.scopeItems.some((s, i) => {
+          if (i === idx) return false;
+          return (
+            (s.area || s.heading || "").trim().toUpperCase() === newHeading &&
+            (s.itemName || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()
+          );
+        });
+
+        if (duplicateExists) {
+          showToast(`"${item.itemName}" already exists under heading "${newHeading}".`, "error");
+          return cfg; // Do not update
+        }
+      }
+
+      return {
+        ...cfg,
+        scopeItems: cfg.scopeItems.map((s, i) => {
+          if (i !== idx) return s;
+          const target = { ...s, [key]: value };
+          if (key === "description") {
+            target.isDescriptionCustom = true;
+          }
+          if (key === "area") {
+            target.isAreaCustom = true;
+          }
+          return target;
+        }),
+      };
+    });
   };
 
   // Quick-add chips from the firm-wide Master → Schedule categories.
@@ -352,44 +394,142 @@ const ProposalMaster = () => {
   );
 
   const addScopeRow = (preset) => {
-    const newRow = preset
-      ? {
-          area: preset.name,
-          description: "",
-          amount: 0,
-          days:
-            preset.days != null && preset.days !== ""
-              ? preset.days
-              : getRoomDefaultDays(preset.name),
-          materials: [],
-        }
-      : blankScope();
+    if (!preset) {
+      // Blank scope — add directly
+      const newRow = blankScope();
+      setConfigField((cfg) => ({
+        ...cfg,
+        scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
+      }));
+      setExpanded((p) => ({ ...p, [0]: false }));
+      return;
+    }
+
+    const currentScopeItems = activeConfig?.scopeItems || [];
+    const areaName = preset.name;
+    const catKey = getCategoryKey(areaName);
+
+    // Collect all unique headings of the same category
+    const existingHeadings = Array.from(
+      new Set(currentScopeItems.map((s) => (s.area || s.heading || "Unassigned").trim().toUpperCase()))
+    ).filter((h) => getHeadingCategoryKey(h, currentScopeItems) === catKey);
+
+    // Headings that already contain this exact area name as a scope item
+    const headingsWithItem = currentScopeItems
+      .filter((s) => (s.itemName || s.description || "").trim().toUpperCase() === areaName.trim().toUpperCase())
+      .map((s) => (s.area || s.heading || "Unassigned").trim().toUpperCase());
+
+    // F. Single Heading Exception — 0 or 1 headings of matching category: add directly
+    if (existingHeadings.length <= 1) {
+      const targetArea = existingHeadings.length === 1 ? existingHeadings[0] : areaName;
+      const newRow = {
+        area: targetArea,
+        description: "",
+        amount: 0,
+        days: preset.days != null && preset.days !== "" ? preset.days : getRoomDefaultDays(areaName),
+        materials: [],
+      };
+      setConfigField((cfg) => ({
+        ...cfg,
+        scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
+      }));
+      setExpanded((p) => ({ ...p, [0]: false }));
+      showToast(`Added "${areaName}"`, "success");
+      return;
+    }
+
+    // Multiple headings — show destination prompt
+    setDestPrompt({
+      isOpen: true,
+      itemName: areaName,
+      itemCategory: areaName,
+      existingHeadings,
+      headingsWithItem,
+      pendingPreset: preset,
+    });
+  };
+
+  const handleDestPromptSelect = (heading) => {
+    const preset = destPrompt.pendingPreset;
+    const areaName = preset?.name || heading;
+    const newRow = {
+      area: heading,
+      description: "",
+      amount: 0,
+      days: preset?.days != null && preset?.days !== "" ? preset.days : getRoomDefaultDays(areaName),
+      materials: [],
+    };
     setConfigField((cfg) => ({
       ...cfg,
-      scopeItems: [...cfg.scopeItems, newRow],
+      scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
     }));
-    setExpanded((p) => ({
-      ...p,
-      [0]: false,
+    setExpanded((p) => ({ ...p, [0]: false }));
+    showToast(`Added "${areaName}" under "${heading}"`, "success");
+    setDestPrompt((p) => ({ ...p, isOpen: false }));
+  };
+
+  const handleDestPromptCreateNew = (newHeading) => {
+    const preset = destPrompt.pendingPreset;
+    const areaName = preset?.name || newHeading;
+    const newRow = {
+      area: newHeading,
+      description: "",
+      amount: 0,
+      days: preset?.days != null && preset?.days !== "" ? preset.days : getRoomDefaultDays(areaName),
+      materials: [],
+    };
+    setConfigField((cfg) => ({
+      ...cfg,
+      scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
     }));
-    if (preset) showToast(`Added "${preset.name}"`, "success");
+    setExpanded((p) => ({ ...p, [0]: false }));
+    showToast(`Added "${areaName}" under new heading "${newHeading}"`, "success");
+    setDestPrompt((p) => ({ ...p, isOpen: false }));
   };
 
   // Save handler for the shared Item Form modal opened by "Add Scope".
   const handleScopeFormSave = (formOrArray) => {
+    const activeScopeItems = activeConfig?.scopeItems || [];
+    const checkDuplicate = (heading, itemName, excludeIdx = null) => {
+      const h = heading.trim().toUpperCase();
+      const n = itemName.trim().toLowerCase();
+      return activeScopeItems.some((s, idx) => {
+        if (excludeIdx !== null && idx === excludeIdx) return false;
+        return (
+          (s.area || s.heading || "").trim().toUpperCase() === h &&
+          (s.itemName || "").trim().toLowerCase() === n
+        );
+      });
+    };
+
     if (Array.isArray(formOrArray)) {
+      for (const form of formOrArray) {
+        const heading = form.heading || form.description || "";
+        const itemName = form.itemName || form.description || "";
+        if (checkDuplicate(heading, itemName)) {
+          showToast(`"${itemName}" already exists under heading "${heading.toUpperCase()}".`, "error");
+          return;
+        }
+      }
+
       const newRows = formOrArray.map((form) => {
         const computed = computeLibraryItemAmount(form);
         const amount = computed || Number(form.rate) || 0;
         const materials = form.materials ? form.materials.map((m) => ({ ...m })) : [];
-        const area = form.description || "";
+        const heading = form.heading || form.description || "";
+        const itemName = form.itemName || form.description || "";
+        const description = form.spec || form.description || "";
+        const area = heading;
         const days =
           form.days !== "" && form.days != null
             ? Number(form.days)
             : getRoomDefaultDays(area);
         return {
+          ...form,
+          heading,
+          itemName,
+          description,
           area,
-          description: form.spec || "",
           amount,
           days,
           materials,
@@ -404,23 +544,27 @@ const ProposalMaster = () => {
 
       setConfigField((cfg) => ({
         ...cfg,
-        scopeItems: [...cfg.scopeItems, ...newRows],
+        scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, newRows),
       }));
       showToast(`Added ${newRows.length} scope item(s)`, "success");
     } else {
       const form = formOrArray;
       const computed = computeLibraryItemAmount(form);
-      // Fall back to the item's rate as a lump sum when it has no qty/dimensions
-      // (library items often carry just a rate), so the rate isn't lost.
       const amount = computed || Number(form.rate) || 0;
       const materials = form.materials ? form.materials.map((m) => ({ ...m })) : [];
-      const area = form.description || "";
-      // Days come from the modal field (auto-filled from the room default, editable),
-      // falling back to the room's configured default if left blank.
+      const heading = form.heading || form.description || "";
+      const itemName = form.itemName || form.description || "";
+      const description = form.spec || form.description || "";
+      const area = heading;
       const days =
         form.days !== "" && form.days != null
           ? Number(form.days)
           : getRoomDefaultDays(area);
+
+      if (checkDuplicate(heading, itemName, editingScopeIdx)) {
+        showToast(`"${itemName}" already exists under heading "${heading.toUpperCase()}".`, "error");
+        return;
+      }
 
       if (editingScopeIdx != null) {
         setConfigField((cfg) => ({
@@ -429,8 +573,11 @@ const ProposalMaster = () => {
             i === editingScopeIdx
               ? {
                   ...s,
+                  ...form,
+                  heading,
+                  itemName,
+                  description,
                   area,
-                  description: form.spec || "",
                   amount,
                   days,
                   materials,
@@ -444,11 +591,14 @@ const ProposalMaster = () => {
               : s,
           ),
         }));
-        showToast(`Updated "${area || "scope"}"`, "success");
+        showToast(`Updated "${heading || "scope"}"`, "success");
       } else {
         const newRow = {
+          ...form,
+          heading,
+          itemName,
+          description,
           area,
-          description: form.spec || "",
           amount,
           days,
           materials,
@@ -461,9 +611,9 @@ const ProposalMaster = () => {
         };
         setConfigField((cfg) => ({
           ...cfg,
-          scopeItems: [...cfg.scopeItems, newRow],
+          scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
         }));
-        showToast(`Added "${area || "scope"}"`, "success");
+        showToast(`Added "${heading || "scope"}"`, "success");
       }
     }
     setScopeFormOpen(false);
@@ -916,7 +1066,7 @@ const ProposalMaster = () => {
                         </p>
                         {firstCfg?.sizeRange && (
                           <span className="text-[9.5px] text-text-subtle truncate">
-                            {firstCfg.sizeRange}
+                            {formatSizeRange(firstCfg.sizeRange)}
                           </span>
                         )}
                       </div>
@@ -1375,7 +1525,7 @@ const ProposalMaster = () => {
                         </button>
                         <input
                           type="text"
-                          value={item.description}
+                          value={item.description || ""}
                           onChange={(e) =>
                             updateScope(idx, "description", e.target.value)
                           }
@@ -1703,8 +1853,21 @@ const ProposalMaster = () => {
           showCategory={false}
           showTags={false}
           multiEntryMode={editingScopeIdx == null}
+          existingScopeItems={activeConfig?.scopeItems || []}
         />
       )}
+
+      {/* ── Destination Prompt Modal for Quick-Add Scope Chips ────────── */}
+      <DestinationPromptModal
+        isOpen={destPrompt.isOpen}
+        onClose={() => setDestPrompt((p) => ({ ...p, isOpen: false }))}
+        itemName={destPrompt.itemName}
+        itemCategory={destPrompt.itemCategory}
+        existingHeadings={destPrompt.existingHeadings}
+        headingsWithItem={destPrompt.headingsWithItem}
+        onSelect={handleDestPromptSelect}
+        onCreateNew={handleDestPromptCreateNew}
+      />
 
       {/* ── Add Type Modal — multi-select property types with inline add ── */}
       {addTypeModalOpen && (

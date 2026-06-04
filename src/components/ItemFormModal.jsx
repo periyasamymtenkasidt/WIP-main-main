@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -18,14 +18,19 @@ import InputField from "./InputField";
 import CategorySelect from "./CategorySelect";
 import { getScheduleConfig, getRoomDefaultDays } from "../data/scheduleConfig";
 import { roomColor } from "../data/categoryColors";
-import { assignCategoryNames } from "../utils/scopeNaming";
+import {
+  assignCategoryNames,
+  getDetailedDescription,
+  getCategoryKey,
+  getCategoryFromItemName,
+  getHeadingCategoryKey,
+} from "../utils/scopeNaming";
+import DestinationPromptModal from "./DestinationPromptModal";
 
 const itemFormSchema = yup.object().shape({
-  description: yup
-    .string()
-    .required("Item name is required")
-    .trim()
-    .min(1, "Item name is required"),
+  heading: yup.string().trim(),
+  itemName: yup.string().trim(),
+  description: yup.string().trim(),
   spec: yup.string().trim(),
   hsn: yup.string().trim(),
   rate: yup
@@ -77,6 +82,7 @@ const ItemFormModal = ({
   showTags = true,
   roomCategoryMode = false,
   multiEntryMode = false,
+  existingScopeItems = [],
 }) => {
   const defaults = {
     ...blankLibraryItem(),
@@ -90,10 +96,13 @@ const ItemFormModal = ({
     setValue: rhfSetValue,
     watch,
     reset: rhfReset,
+    setError,
     formState: { errors },
   } = useForm({
     resolver: yupResolver(itemFormSchema),
     defaultValues: {
+      heading: defaults.heading || defaults.area || "",
+      itemName: defaults.itemName || (roomCategoryMode ? defaults.spec : defaults.description) || "",
       description: defaults.description || "",
       spec: defaults.spec || "",
       hsn: defaults.hsn || "",
@@ -118,25 +127,87 @@ const ItemFormModal = ({
   const [selectedDraftIndex, setSelectedDraftIndex] = useState(null);
 
   const namedDrafts = useMemo(() => {
-    if (!roomCategoryMode) return drafts;
-    const mappedForNaming = drafts.map((d) => {
-      d.area = d.description;
-      return d;
+    return drafts.map((d) => {
+      const heading = d.heading || d.area || "";
+      const itemName = d.itemName || d.description || "";
+      return {
+        ...d,
+        _displayCategory: itemName,
+      };
     });
-    return assignCategoryNames(mappedForNaming);
-  }, [drafts, roomCategoryMode]);
+  }, [drafts]);
 
   const groupedDrafts = useMemo(() => {
     const groups = {};
     drafts.forEach((d, index) => {
-      const cat = d.category || d.description || "Unassigned";
-      if (!groups[cat]) {
-        groups[cat] = [];
+      const heading = d.heading || d.area || "UNASSIGNED";
+      if (!groups[heading]) {
+        groups[heading] = [];
       }
-      groups[cat].push({ draft: d, index });
+      groups[heading].push({ draft: d, index });
     });
     return groups;
   }, [drafts]);
+
+  const [destPrompt, setDestPrompt] = useState({
+    isOpen: false,
+    itemName: "",
+    existingHeadings: [],
+    headingsWithItem: [],
+    onSelect: null,
+    onCreateNew: null,
+    onCancel: null,
+  });
+
+  const getDestinationHeading = (itemName, category) => {
+    return new Promise((resolve, reject) => {
+      const allItems = [
+        ...(existingScopeItems || []),
+        ...drafts,
+      ];
+      
+      const resolvedCategory = category || getCategoryFromItemName(itemName);
+      const itemCatKey = getCategoryKey(resolvedCategory);
+
+      // Filter existing headings to only keep those belonging to the same category
+      const existingHeadings = Array.from(
+        new Set(allItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
+      ).filter(h => getHeadingCategoryKey(h, allItems) === itemCatKey);
+
+      const headingsWithItem = allItems
+        .filter((item) => (item.itemName || item.description || "").trim().toLowerCase() === itemName.trim().toLowerCase())
+        .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
+
+      // Single Heading Exception - only if there is exactly 1 heading of the matching category
+      if (existingHeadings.length === 1) {
+        const singleHeading = existingHeadings[0];
+        if (!headingsWithItem.includes(singleHeading)) {
+          resolve(singleHeading);
+          return;
+        }
+      }
+
+      setDestPrompt({
+        isOpen: true,
+        itemName,
+        category: resolvedCategory,
+        existingHeadings,
+        headingsWithItem,
+        onSelect: (selectedHeading) => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          resolve(selectedHeading);
+        },
+        onCreateNew: (newHeading) => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          resolve(newHeading);
+        },
+        onCancel: () => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          reject(new Error("Cancelled by user"));
+        },
+      });
+    });
+  };
 
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -152,18 +223,31 @@ const ItemFormModal = ({
   const removeMaterial = (idx) =>
     update({ materials: form.materials.filter((_, i) => i !== idx) });
 
+  const watchedItemName = watch("itemName");
+  const [prevItemName, setPrevItemName] = useState(defaults.itemName || "");
+  useEffect(() => {
+    if (roomCategoryMode && watchedItemName && watchedItemName !== prevItemName) {
+      const desc = getDetailedDescription(watchedItemName);
+      if (desc) {
+        rhfSetValue("spec", desc, { shouldValidate: true });
+      }
+      setPrevItemName(watchedItemName);
+    }
+  }, [watchedItemName, roomCategoryMode, rhfSetValue, prevItemName]);
+
   // Convert a library item to the unified form state object
   const libraryItemToFormState = (lib) => {
-    const roomVal = roomCategoryMode ? lib.category || "" : lib.description || "";
-    const specVal = roomCategoryMode
-      ? [lib.description, lib.spec].filter(Boolean).join(" — ")
-      : lib.spec || "";
+    const defaultHeading = (lib.category || "").toUpperCase();
+    const defaultItemName = lib.description || "";
+    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || defaultItemName;
     return {
       ...blankLibraryItem(),
       ...lib,
       draftId: Math.random().toString(36).substring(2, 9),
-      description: roomVal,
-      spec: specVal,
+      heading: defaultHeading,
+      itemName: defaultItemName,
+      description: defaultSpec,
+      spec: defaultSpec,
       hsn: lib.hsn || "",
       rate: lib.rate || 0,
       length: lib.length || 0,
@@ -179,13 +263,14 @@ const ItemFormModal = ({
 
   // Copy fields from a saved library item into the current form.
   const fillFromLibrary = (lib) => {
+    const defaultHeading = (lib.category || "").toUpperCase();
+    const defaultItemName = lib.description || "";
+    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || defaultItemName;
     rhfReset({
-      description: roomCategoryMode
-        ? lib.category || ""
-        : lib.description || "",
-      spec: roomCategoryMode
-        ? [lib.description, lib.spec].filter(Boolean).join(" — ")
-        : lib.spec || "",
+      heading: defaultHeading,
+      itemName: defaultItemName,
+      description: defaultSpec,
+      spec: defaultSpec,
       hsn: lib.hsn || "",
       rate: lib.rate || 0,
       length: lib.length || 0,
@@ -198,6 +283,10 @@ const ItemFormModal = ({
       ...lib,
       id: p.id,
       masterId: lib.id,
+      heading: defaultHeading,
+      itemName: defaultItemName,
+      description: defaultSpec,
+      spec: defaultSpec,
       materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
       tags: lib.tags ? [...lib.tags] : [],
     }));
@@ -205,28 +294,70 @@ const ItemFormModal = ({
   };
 
   // Multi-entry library pick handler
-  const handleLibraryPick = (libOrLibs) => {
-    if (Array.isArray(libOrLibs)) {
-      const newDrafts = libOrLibs.map((lib) => libraryItemToFormState(lib));
-      setDrafts((prev) => {
-        const next = [...prev, ...newDrafts];
-        const newFirstIndex = prev.length;
-        setSelectedDraftIndex(newFirstIndex);
-        setTimeout(() => {
-          loadDraftIntoForm(newDrafts[0]);
-        }, 0);
-        return next;
-      });
+  const handleLibraryPick = async (libOrLibs) => {
+    try {
+      if (Array.isArray(libOrLibs)) {
+        const newDrafts = [];
+        for (const lib of libOrLibs) {
+          const itemName = lib.description || "";
+          const heading = await getDestinationHeading(itemName, lib.category);
+          const itemFormState = libraryItemToFormState(lib);
+          itemFormState.heading = heading;
+          itemFormState.area = heading;
+          newDrafts.push(itemFormState);
+        }
+        setDrafts((prev) => {
+          const next = [...prev, ...newDrafts];
+          const newFirstIndex = prev.length;
+          setSelectedDraftIndex(newFirstIndex);
+          setTimeout(() => {
+            loadDraftIntoForm(newDrafts[0]);
+          }, 0);
+          return next;
+        });
+        setPickerOpen(false);
+      } else {
+        const itemName = libOrLibs.description || "";
+        const heading = await getDestinationHeading(itemName, libOrLibs.category);
+        
+        const defaultSpec = libOrLibs.spec || getDetailedDescription(itemName) || itemName;
+        rhfReset({
+          heading: heading,
+          itemName: itemName,
+          description: defaultSpec,
+          spec: defaultSpec,
+          hsn: libOrLibs.hsn || "",
+          rate: libOrLibs.rate || 0,
+          length: libOrLibs.length || 0,
+          breadth: libOrLibs.breadth || 0,
+          height: libOrLibs.height || 0,
+          qty: libOrLibs.qty || 0,
+        });
+        setForm((p) => ({
+          ...blankLibraryItem(),
+          ...libOrLibs,
+          id: p.id,
+          masterId: libOrLibs.id,
+          heading: heading,
+          itemName: itemName,
+          description: defaultSpec,
+          spec: defaultSpec,
+          materials: libOrLibs.materials ? libOrLibs.materials.map((m) => ({ ...m })) : [],
+          tags: libOrLibs.tags ? [...libOrLibs.tags] : [],
+        }));
+        setPickerOpen(false);
+      }
+    } catch (err) {
       setPickerOpen(false);
-    } else {
-      fillFromLibrary(libOrLibs);
     }
   };
 
   const loadDraftIntoForm = (draft) => {
     rhfReset({
+      heading: draft.heading || draft.area || "",
+      itemName: draft.itemName || draft.description || "",
       description: draft.description || "",
-      spec: draft.spec || "",
+      spec: draft.spec || draft.description || "",
       hsn: draft.hsn || "",
       rate: draft.rate || 0,
       length: draft.length || 0,
@@ -247,6 +378,8 @@ const ItemFormModal = ({
   const handleNewDraftClick = () => {
     setSelectedDraftIndex(null);
     rhfReset({
+      heading: "",
+      itemName: "",
       description: "",
       spec: "",
       hsn: "",
@@ -263,11 +396,69 @@ const ItemFormModal = ({
     });
   };
 
+  const validateCustom = (data, excludeDraftIndex = null) => {
+    if (roomCategoryMode) {
+      if (!data.heading?.trim()) {
+        setError("heading", { type: "manual", message: "Heading is required" });
+        return false;
+      }
+      if (!data.itemName?.trim()) {
+        setError("itemName", { type: "manual", message: "Item Name is required" });
+        return false;
+      }
+
+      // Check for duplicate itemName under heading
+      const currentHeading = data.heading.trim().toUpperCase();
+      const currentItemName = data.itemName.trim().toLowerCase();
+
+      // Check against existing scope items
+      const isDuplicateInScope = (existingScopeItems || []).some((item) => {
+        if (initial && initial.id && item.id === initial.id) return false;
+        return (
+          (item.area || item.heading || "").trim().toUpperCase() === currentHeading &&
+          (item.itemName || "").trim().toLowerCase() === currentItemName
+        );
+      });
+
+      if (isDuplicateInScope) {
+        setError("heading", { type: "manual", message: "This item already exists under this heading" });
+        return false;
+      }
+
+      // Check against other drafts
+      const isDuplicateInDrafts = drafts.some((draft, index) => {
+        if (excludeDraftIndex !== null && index === excludeDraftIndex) return false;
+        return (
+          (draft.heading || draft.area || "").trim().toUpperCase() === currentHeading &&
+          (draft.itemName || "").trim().toLowerCase() === currentItemName
+        );
+      });
+
+      if (isDuplicateInDrafts) {
+        setError("heading", { type: "manual", message: "This item already exists in your drafts under this heading" });
+        return false;
+      }
+    } else {
+      if (!data.description?.trim()) {
+        setError("description", { type: "manual", message: "Item Name is required" });
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleSaveDraft = (validatedData) => {
+    if (!validateCustom(validatedData, selectedDraftIndex)) return;
+    const defaultSpec = getDetailedDescription(roomCategoryMode ? validatedData.itemName : validatedData.description);
+    const isDescriptionCustom = roomCategoryMode ? (validatedData.spec !== defaultSpec) : false;
     const draftData = {
       ...form,
-      description: validatedData.description,
+      heading: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
+      itemName: roomCategoryMode ? validatedData.itemName : validatedData.description,
+      description: roomCategoryMode ? validatedData.spec : validatedData.description,
       spec: validatedData.spec || "",
+      area: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
+      isDescriptionCustom,
       hsn: validatedData.hsn || "",
       rate: Number(validatedData.rate) || 0,
       gstPercent: Number(form.gstPercent) || 18,
@@ -318,10 +509,17 @@ const ItemFormModal = ({
   };
 
   const handleFormSubmit = (validatedData) => {
+    if (!validateCustom(validatedData)) return;
+    const defaultSpec = getDetailedDescription(roomCategoryMode ? validatedData.itemName : validatedData.description);
+    const isDescriptionCustom = roomCategoryMode ? (validatedData.spec !== defaultSpec) : false;
     onSave({
       ...form,
-      description: validatedData.description,
+      heading: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
+      itemName: roomCategoryMode ? validatedData.itemName : validatedData.description,
+      description: roomCategoryMode ? validatedData.spec : validatedData.description,
       spec: validatedData.spec || "",
+      area: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
+      isDescriptionCustom,
       hsn: validatedData.hsn || "",
       rate: Number(validatedData.rate) || 0,
       gstPercent: Number(form.gstPercent) || 18,
@@ -484,34 +682,60 @@ const ItemFormModal = ({
           )}
 
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            <div>
-              <Label>{roomCategoryMode ? "Room / Category *" : "Item Name *"}</Label>
-              {roomCategoryMode ? (
-                <>
-                  <CategorySelect
-                    value={watch("description")}
-                    onChange={(v) => {
-                      rhfSetValue("description", v, { shouldValidate: true });
-                      const d = getRoomDefaultDays(v);
-                      if (d !== "") update({ days: d });
-                    }}
-                    className={`${inputBase} cursor-pointer`}
+            {roomCategoryMode ? (
+              <>
+                <div>
+                  <Label>Heading *</Label>
+                  <InputField
+                    name="heading"
+                    register={register("heading")}
+                    placeholder="e.g. COMMON BATHROOM"
+                    error={errors.heading?.message}
                   />
-                  {errors.description?.message && (
-                    <p className="text-red-500 text-[10px] mt-1">
-                      {errors.description.message}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <InputField
-                  name="description"
-                  register={register("description")}
-                  placeholder="e.g. False ceiling area"
-                  error={errors.description?.message}
-                />
-              )}
-            </div>
+                </div>
+                <div>
+                  <Label>Item Name *</Label>
+                  <InputField
+                    name="itemName"
+                    register={register("itemName")}
+                    placeholder="e.g. Vanity, Mirror, Shower Partition"
+                    error={errors.itemName?.message}
+                  />
+                </div>
+                <div>
+                  <Label>Detailed Description</Label>
+                  <textarea
+                    rows={3}
+                    {...register("spec")}
+                    placeholder="Enter detailed description…"
+                    className={inputBase}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <Label>Item Name *</Label>
+                  <InputField
+                    name="description"
+                    register={register("description")}
+                    placeholder="e.g. False ceiling area"
+                    error={errors.description?.message}
+                  />
+                </div>
+                <div>
+                  <Label>Detailed Specification</Label>
+                  <InputField
+                    type="textarea"
+                    name="spec"
+                    register={register("spec")}
+                    rows={3}
+                    placeholder="e.g. Supply, transport and Installation of Gypsum ceiling. 12.5 mm thk Gyproc board with Gypliner channel sections at every 450mm with fixing brackets, angles and channels connectors also with premium emulsion paint finish."
+                    error={errors.spec?.message}
+                  />
+                </div>
+              </>
+            )}
 
             {(showCategory || roomCategoryMode) && (
               <div>
@@ -529,18 +753,6 @@ const ItemFormModal = ({
                 </p>
               </div>
             )}
-
-            <div>
-              <Label>Detailed Specification</Label>
-              <InputField
-                type="textarea"
-                name="spec"
-                register={register("spec")}
-                rows={3}
-                placeholder="e.g. Supply, transport and Installation of Gypsum ceiling. 12.5 mm thk Gyproc board with Gypliner channel sections at every 450mm with fixing brackets, angles and channels connectors also with premium emulsion paint finish."
-                error={errors.spec?.message}
-              />
-            </div>
 
             <div className={`grid grid-cols-2 sm:grid-cols-${showCategory ? 4 : 3} gap-3`}>
               {showCategory && (
@@ -787,6 +999,17 @@ const ItemFormModal = ({
           multiSelectMode={multiEntryMode}
         />
       )}
+
+      <DestinationPromptModal
+        isOpen={destPrompt.isOpen}
+        onClose={destPrompt.onCancel}
+        itemName={destPrompt.itemName}
+        itemCategory={destPrompt.category}
+        existingHeadings={destPrompt.existingHeadings}
+        headingsWithItem={destPrompt.headingsWithItem}
+        onSelect={destPrompt.onSelect}
+        onCreateNew={destPrompt.onCreateNew}
+      />
     </div>
   );
 };

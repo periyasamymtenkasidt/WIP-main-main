@@ -14,6 +14,7 @@ import {
 import { computeBoqTotals, computeItemAmount, computeItemQty } from "../../data/boqStorage";
 import { UNITS } from "../../data/boqUnits";
 import { inrToWords } from "../../utils/numberToWords";
+import { formatSizeRange } from "../../utils/sizeRangeValidation";
 
 // Brand block — replace these with real firm details (eventually pull from
 // Settings → Org Profile when that's built).
@@ -211,7 +212,7 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
           )}
           {boq.project?.sizeRange && (
             <p className="text-[10.5px] text-text-muted mt-0.5">
-              Size: <span className="font-semibold text-textcolor">{boq.project.sizeRange}</span>
+              Size: <span className="font-semibold text-textcolor">{formatSizeRange(boq.project.sizeRange)}</span>
             </p>
           )}
           {boq.validity && (

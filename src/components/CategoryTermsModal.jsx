@@ -300,7 +300,7 @@ const CategoryTermsModal = ({
             No Included or Not Included Items available.
           </p>
           <p className="text-[12px] text-text-subtle">
-            Please navigate to the <MasterNavLink text="Master Module" tab="terms" /> to add items.
+            Please navigate to the <MasterNavLink text="Master Module" tab="terms" sub={category} /> to add items.
           </p>
         </div>
       );
@@ -316,7 +316,7 @@ const CategoryTermsModal = ({
                 No Included Items available.
               </p>
               <p className="text-[11.5px] text-text-subtle leading-relaxed">
-                Please navigate to the <MasterNavLink text="Master Module" tab="terms" /> to add Included Items.
+                Please navigate to the <MasterNavLink text="Master Module" tab="terms" sub={category} /> to add Included Items.
               </p>
             </div>
           ) : (
@@ -355,7 +355,7 @@ const CategoryTermsModal = ({
                 No Not Included Items available.
               </p>
               <p className="text-[11.5px] text-text-subtle leading-relaxed">
-                Please navigate to the <MasterNavLink text="Master Module" tab="terms" /> to add Not Included Items.
+                Please navigate to the <MasterNavLink text="Master Module" tab="terms" sub={category} /> to add Not Included Items.
               </p>
             </div>
           ) : (

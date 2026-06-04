@@ -84,7 +84,8 @@ export function addRoomCategory(name, days = "") {
 
 // Default duration (days) configured for a category, or "" if none/unknown.
 export function getRoomDefaultDays(name, config = getScheduleConfig()) {
-  const r = config.rooms.find((x) => x.name === name);
+  const cleanName = (name || "").replace(/\s+\d+$/g, "").trim().toUpperCase();
+  const r = config.rooms.find((x) => (x.name || "").trim().toUpperCase() === cleanName);
   return r && r.days !== "" && r.days != null ? r.days : "";
 }
 

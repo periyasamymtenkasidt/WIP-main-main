@@ -23,7 +23,80 @@ const migrateList = (arr) => {
   });
 };
 
-const CATEGORIES = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+export const getTermsCategories = () => {
+  try {
+    const raw = localStorage.getItem("globalTerms_categories");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Error reading terms categories", e);
+  }
+  return [
+    { id: "STATUATORY", label: "Statutory", desc: "Legal & regulatory compliance" },
+    { id: "DELIVERY", label: "Delivery", desc: "Logistics, carriage & schedule" },
+    { id: "PAYMENTS", label: "Payments", desc: "Deposits, milestones & invoicing" },
+    { id: "TECHNICAL", label: "Technical", desc: "Drawings, dimensions & specs" },
+    { id: "GENERAL", label: "General", desc: "Validity, taxes & standard terms" },
+  ];
+};
+
+export const saveTermsCategories = (categories) => {
+  try {
+    localStorage.setItem("globalTerms_categories", JSON.stringify(categories));
+  } catch (e) {
+    console.error("Error saving terms categories", e);
+  }
+};
+
+export const addTermsCategory = (label, desc = "Custom Terms & Conditions category") => {
+  const categories = getTermsCategories();
+  const id = label.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  if (categories.some((c) => c.id === id)) {
+    throw new Error(`Category "${label}" already exists.`);
+  }
+  const newCat = {
+    id,
+    label,
+    desc,
+  };
+  categories.push(newCat);
+  saveTermsCategories(categories);
+  saveGlobalTerms(id, { inclusions: [], exclusions: [] });
+  return newCat;
+};
+
+export const deleteTermsCategory = (id) => {
+  const categories = getTermsCategories();
+  const filtered = categories.filter((c) => c.id !== id);
+  saveTermsCategories(filtered);
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        delete parsed[id];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
+  } catch (e) {
+    console.error("Error deleting global terms for category", id, e);
+  }
+};
+
+export const renameTermsCategory = (id, newLabel, newDesc) => {
+  const categories = getTermsCategories();
+  const updated = categories.map((c) => {
+    if (c.id === id) {
+      return { ...c, label: newLabel, desc: newDesc !== undefined ? newDesc : c.desc };
+    }
+    return c;
+  });
+  saveTermsCategories(updated);
+};
 
 /** Read the global terms from localStorage. Auto-migrates v1 → v2 & category structure. */
 export const getGlobalTerms = (category = "STATUATORY") => {
@@ -100,8 +173,10 @@ export const saveGlobalTerms = (category, data) => {
 export const getDefaultTermStrings = () => {
   const inclusions = [];
   const exclusions = [];
+  const categories = getTermsCategories();
   
-  CATEGORIES.forEach((category) => {
+  categories.forEach((catObj) => {
+    const category = catObj.id;
     const terms = getGlobalTerms(category);
     terms.inclusions
       .filter((t) => t.isDefault)
@@ -122,8 +197,10 @@ export const getDefaultTermStrings = () => {
 export const getNonDefaultTermStrings = () => {
   const inclusions = [];
   const exclusions = [];
+  const categories = getTermsCategories();
   
-  CATEGORIES.forEach((category) => {
+  categories.forEach((catObj) => {
+    const category = catObj.id;
     const terms = getGlobalTerms(category);
     terms.inclusions
       .filter((t) => !t.isDefault)
@@ -232,7 +309,9 @@ export const seedDefaultTerms = () => {
 
     if (localStorage.getItem(SEED_FLAG)) return; // already seeded
 
-    CATEGORIES.forEach((cat) => {
+    const categories = getTermsCategories();
+    categories.forEach((catObj) => {
+      const cat = catObj.id;
       const existing = getGlobalTerms(cat);
       const hasData =
         (existing.inclusions && existing.inclusions.length > 0) ||

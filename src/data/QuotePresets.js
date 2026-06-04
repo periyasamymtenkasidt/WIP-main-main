@@ -5,6 +5,7 @@
 
 import { getRoomDefaultDays } from "./scheduleConfig";
 import { cleanSizeRange } from "../utils/sizeRangeValidation";
+import { normalizeScopeItem } from "../utils/scopeNaming";
 
 export const GST_RATE = 18;
 
@@ -44,7 +45,7 @@ export const DEFAULT_PRESETS = {
     label: "1 BHK ${propertyTypes[0]}",
     propertyType: "Apartment",
     propertyTypes: ["Apartment", "Studio Apartment"],
-    sizeRange: "450–600 sq ft",
+    sizeRange: "450-600",
     scopeItems: [
       { area: "Living Room", description: "False ceiling, accent wall, TV unit, lighting", amount: 80000, days: 20, materials: MAT_LIVING },
       { area: "Kitchen", description: "Modular kitchen — base + wall units, granite, chimney, hob", amount: 150000, days: 15, materials: MAT_KITCHEN },
@@ -58,7 +59,7 @@ export const DEFAULT_PRESETS = {
     label: "2 BHK Apartment",
     propertyType: "Apartment",
     propertyTypes: ["Apartment", "Penthouse", "Duplex"],
-    sizeRange: "800–1100 sq ft",
+    sizeRange: "800-1100",
     scopeItems: [
       { area: "Living Room", description: "Living + dining — false ceiling, TV unit, crockery unit, lighting", amount: 130000, days: 20, materials: MAT_LIVING },
       { area: "Kitchen", description: "L-shaped modular kitchen, granite, chimney, hob, water purifier provision", amount: 180000, days: 15, materials: MAT_KITCHEN },
@@ -74,7 +75,7 @@ export const DEFAULT_PRESETS = {
     label: "3 BHK Apartment",
     propertyType: "Apartment",
     propertyTypes: ["Apartment", "Penthouse", "Duplex", "Independent House"],
-    sizeRange: "1200–1600 sq ft",
+    sizeRange: "1200-1600",
     scopeItems: [
       { area: "Living Room", description: "Living + dining — designer false ceiling, TV unit, bar/crockery unit, accent wall, lighting", amount: 180000, days: 20, materials: MAT_LIVING },
       { area: "Kitchen", description: "U-shaped modular kitchen, premium granite, chimney, hob, tall units", amount: 220000, days: 15, materials: MAT_KITCHEN },
@@ -96,7 +97,7 @@ export const DEFAULT_PRESETS = {
       "Farm House",
       "Beach House",
     ],
-    sizeRange: "2400+ sq ft",
+    sizeRange: "2400+",
     scopeItems: [
       { area: "Living Room", description: "Foyer & living — double-height ceiling treatment, TV unit, accent walls, designer lighting", amount: 280000, days: 20, materials: MAT_LIVING },
       { area: "Dining", description: "Formal & family dining — crockery unit, accent wall, statement lighting", amount: 150000, days: 10, materials: MAT_LIVING },
@@ -171,7 +172,7 @@ const mapScopeItem = (s) => {
     materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
   };
   if (next.days === undefined) next.days = getRoomDefaultDays(area);
-  return next;
+  return normalizeScopeItem(next);
 };
 
 const normalizePreset = (p) => {
@@ -242,13 +243,17 @@ export const getMaster = () => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
-        return normalizeMaster(parsed);
+        const normalized = normalizeMaster(parsed);
+        localStorage.setItem(MASTER_KEY, JSON.stringify(normalized));
+        return normalized;
       }
     }
   } catch {
     // fall through to defaults
   }
-  return normalizeMaster(DEFAULT_PRESETS);
+  const normalizedDefault = normalizeMaster(DEFAULT_PRESETS);
+  localStorage.setItem(MASTER_KEY, JSON.stringify(normalizedDefault));
+  return normalizedDefault;
 };
 
 export const saveMaster = (master) => {

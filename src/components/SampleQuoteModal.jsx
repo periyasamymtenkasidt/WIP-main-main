@@ -18,12 +18,14 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
+  FileCheck,
 } from "lucide-react";
 import Modal from "./Modal";
 import InputField from "./InputField";
 import {
   getDefaultTermStrings,
   getGlobalTerms,
+  getTermsCategories,
 } from "../data/termsStorage";
 import CategoryTermsModal from "./CategoryTermsModal";
 import QuotePreview from "./QuotePreview";
@@ -34,10 +36,20 @@ import {
   generateQuoteId,
   getConfigForType,
 } from "../data/QuotePresets";
-import { computeLibraryItemAmount } from "../data/itemLibrary";
+import { computeLibraryItemAmount, computeLibraryItemArea } from "../data/itemLibrary";
+import DestinationPromptModal from "./DestinationPromptModal";
 import { formatAmount } from "../utils/formatAmount";
 import { formatSizeRange } from "../utils/sizeRangeValidation";
-import { assignCategoryNames } from "../utils/scopeNaming";
+import {
+  assignCategoryNames,
+  normalizeScopeItem,
+  getDetailedDescription,
+  addScopeItemsWithDuplicateCheck,
+  refreshScopeItemsFromMaster,
+  getCategoryKey,
+  getCategoryFromItemName,
+  getHeadingCategoryKey,
+} from "../utils/scopeNaming";
 import { roomColor } from "../data/categoryColors";
 import CategorySelect from "./CategorySelect";
 import LibraryPickerModal from "./LibraryPickerModal";
@@ -88,13 +100,15 @@ const SQCheckbox = ({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 // assignCategoryNames is now imported from ../utils/scopeNaming
 
-const CATEGORIES_META = [
-  { id: "STATUATORY", label: "Statutory", icon: Scale },
-  { id: "DELIVERY", label: "Delivery", icon: Truck },
-  { id: "PAYMENTS", label: "Payment", icon: CreditCard },
-  { id: "TECHNICAL", label: "Technical", icon: Wrench },
-  { id: "GENERAL", label: "General", icon: FileText },
-];
+const getCategoriesMeta = () => {
+  return getTermsCategories().map((c) => ({
+    id: c.id,
+    label: c.label,
+    icon: FileCheck,
+  }));
+};
+
+const getCategoriesList = () => getTermsCategories().map((c) => c.id);
 
 // ── Build initial data ──────────────────────────────────────────────────────
 const buildSampleQuoteData = ({
@@ -115,27 +129,23 @@ const buildSampleQuoteData = ({
   const cfg = getConfigForType(activePresetKey, activePropertyType) || {};
   const quoteId = generateQuoteId();
   const createdAt = new Date().toISOString();
-  const scopeItems = presetData?.scopeItems
-    ? presetData.scopeItems.map((s) => ({
+  let scopeItems = presetData?.scopeItems
+    ? presetData.scopeItems.map((s) => normalizeScopeItem({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
       }))
-    : (cfg.scopeItems || []).map((s) => ({
+    : (cfg.scopeItems || []).map((s) => normalizeScopeItem({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
       }));
+
+  scopeItems = refreshScopeItemsFromMaster(scopeItems, activePresetKey, activePropertyType);
   // Load inclusions/exclusions per category with legacy support
   const categoryInclusions = {};
   const categoryExclusions = {};
   const addedInclusions = {};
   const addedExclusions = {};
-  const categoriesList = [
-    "STATUATORY",
-    "DELIVERY",
-    "PAYMENTS",
-    "TECHNICAL",
-    "GENERAL",
-  ];
+  const categoriesList = getCategoriesList();
 
   categoriesList.forEach((cat) => {
     const global = getGlobalTerms(cat);
@@ -269,6 +279,62 @@ Digital Atelier`);
     return () => clearTimeout(t);
   }, [toast]);
 
+  const [destPrompt, setDestPrompt] = useState({
+    isOpen: false,
+    itemName: "",
+    existingHeadings: [],
+    headingsWithItem: [],
+    onSelect: null,
+    onCreateNew: null,
+    onCancel: null,
+  });
+
+  const getDestinationHeading = (itemName, scopeItems, category) => {
+    return new Promise((resolve, reject) => {
+      const resolvedCategory = category || getCategoryFromItemName(itemName);
+      const itemCatKey = getCategoryKey(resolvedCategory);
+
+      // Filter existing headings to only keep those belonging to the same category
+      const existingHeadings = Array.from(
+        new Set(scopeItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
+      ).filter(h => getHeadingCategoryKey(h, scopeItems) === itemCatKey);
+
+      // Check which headings already contain this item
+      const headingsWithItem = scopeItems
+        .filter((item) => (item.itemName || "").trim().toLowerCase() === itemName.trim().toLowerCase())
+        .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
+
+      // Single Heading Exception - only if there is exactly 1 heading of the matching category
+      if (existingHeadings.length === 1) {
+        const singleHeading = existingHeadings[0];
+        if (!headingsWithItem.includes(singleHeading)) {
+          resolve(singleHeading);
+          return;
+        }
+      }
+
+      setDestPrompt({
+        isOpen: true,
+        itemName,
+        category: resolvedCategory,
+        existingHeadings,
+        headingsWithItem,
+        onSelect: (selectedHeading) => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          resolve(selectedHeading);
+        },
+        onCreateNew: (newHeading) => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          resolve(newHeading);
+        },
+        onCancel: () => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          reject(new Error("Cancelled by user"));
+        },
+      });
+    });
+  };
+
   const onSaveRef = useRef(onSave);
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -318,12 +384,13 @@ Digital Atelier`);
   const [activeCategoryModal, setActiveCategoryModal] = useState(null);
   const [termsParentModalOpen, setTermsParentModalOpen] = useState(false);
 
-  const [expandedCategories, setExpandedCategories] = useState({
-    STATUATORY: false,
-    DELIVERY: false,
-    PAYMENTS: false,
-    TECHNICAL: false,
-    GENERAL: false,
+  const [expandedCategories, setExpandedCategories] = useState(() => {
+    const cats = getTermsCategories();
+    const initial = {};
+    cats.forEach((c) => {
+      initial[c.id] = false;
+    });
+    return initial;
   });
 
   const totals = useMemo(
@@ -366,13 +433,7 @@ Digital Atelier`);
   };
 
   const toggleInclusion = (item, forcedCat = null) => {
-    const categoriesList = [
-      "STATUATORY",
-      "DELIVERY",
-      "PAYMENTS",
-      "TECHNICAL",
-      "GENERAL",
-    ];
+    const categoriesList = getCategoriesList();
     let foundCat = forcedCat;
     if (!foundCat) {
       foundCat = "GENERAL";
@@ -410,13 +471,7 @@ Digital Atelier`);
   };
 
   const toggleExclusion = (item, forcedCat = null) => {
-    const categoriesList = [
-      "STATUATORY",
-      "DELIVERY",
-      "PAYMENTS",
-      "TECHNICAL",
-      "GENERAL",
-    ];
+    const categoriesList = getCategoriesList();
     let foundCat = forcedCat;
     if (!foundCat) {
       foundCat = "GENERAL";
@@ -454,32 +509,77 @@ Digital Atelier`);
   };
 
   const updateScope = (idx, key, value) => {
-    setFormData((p) => ({
-      ...p,
-      scopeItems: p.scopeItems.map((s, i) =>
-        i === idx ? { ...s, [key]: value } : s,
-      ),
-    }));
+    setFormData((p) => {
+      // Check for duplicate heading if changing the area/heading field
+      if (key === "area") {
+        const item = p.scopeItems[idx];
+        const newHeading = value.trim().toUpperCase();
+        const duplicateExists = p.scopeItems.some((s, i) => {
+          if (i === idx) return false;
+          return (
+            (s.area || s.heading || "").trim().toUpperCase() === newHeading &&
+            (s.itemName || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()
+          );
+        });
+
+        if (duplicateExists) {
+          showToast(`"${item.itemName}" already exists under heading "${newHeading}".`, "error");
+          return p;
+        }
+      }
+
+      return {
+        ...p,
+        scopeItems: p.scopeItems.map((s, i) => {
+          if (i !== idx) return s;
+          const target = { ...s, [key]: value };
+          if (key === "description") {
+            target.isDescriptionCustom = true;
+          }
+          if (key === "area") {
+            target.isAreaCustom = true;
+          }
+          return target;
+        }),
+      };
+    });
   };
 
   // Pick from Library — maps library item to scope row shape (same as QuoteModal)
-  const handleLibraryPick = (lib) => {
-    const days =
-      lib.days != null && lib.days !== ""
-        ? lib.days
-        : getRoomDefaultDays(lib.category);
-    const newRow = {
-      area: lib.category || "",
-      description: lib.description || "",
-      amount: computeLibraryItemAmount(lib),
-      days,
-      materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
-    };
-    setFormData((p) => ({
-      ...p,
-      scopeItems: [...p.scopeItems, newRow],
-    }));
-    setLibraryPickerOpen(false);
+  const handleLibraryPick = async (lib) => {
+    try {
+      const itemName = lib.description || "";
+      const heading = await getDestinationHeading(itemName, formData.scopeItems, lib.category);
+
+      const days =
+        lib.days != null && lib.days !== ""
+          ? lib.days
+          : getRoomDefaultDays(lib.category);
+      const norm = normalizeScopeItem({
+        area: heading,
+        description: lib.description || "",
+      });
+      const newRow = {
+        ...norm,
+        length: lib.length != null ? Number(lib.length) : "",
+        breadth: lib.breadth != null ? Number(lib.breadth) : "",
+        height: lib.height != null ? Number(lib.height) : "",
+        calculatedArea: computeLibraryItemArea ? (computeLibraryItemArea(lib) || 0) : 0,
+        qty: lib.qty != null ? Number(lib.qty) : "",
+        rate: lib.rate != null ? Number(lib.rate) : "",
+        amount: computeLibraryItemAmount(lib) || 0,
+        unit: lib.unit || "sqft",
+        days,
+        materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
+      };
+      setFormData((p) => ({
+        ...p,
+        scopeItems: addScopeItemsWithDuplicateCheck(p.scopeItems, [newRow]),
+      }));
+      setLibraryPickerOpen(false);
+    } catch (err) {
+      setLibraryPickerOpen(false);
+    }
   };
 
   const removeScopeRow = (idx) => {
@@ -766,19 +866,21 @@ Digital Atelier`);
                               <span>{item._displayCategory}</span>
                             </div>
                             <div className="grid grid-cols-[1fr_1.5fr_110px_28px] gap-2 items-start">
-                              <CategorySelect
-                                value={item.area}
-                                onChange={(v) => updateScope(idx, "area", v)}
-                                placeholder="Room…"
-                                disabled={true}
+                              <input
+                                type="text"
+                                readOnly={true}
+                                value={item.area || ""}
+                                placeholder="Heading/Room…"
                                 className="bg-bg-soft border border-bordergray text-[11px] text-text-muted rounded-md px-2 py-2 w-full cursor-not-allowed focus:outline-none"
                               />
                               <input
                                 type="text"
-                                value={item.description}
-                                readOnly={true}
+                                value={item.description || ""}
+                                onChange={(e) =>
+                                  updateScope(idx, "description", e.target.value)
+                                }
                                 placeholder="Description"
-                                className="bg-bg-soft border border-bordergray text-[11px] text-text-muted rounded-md px-2 py-2 w-full cursor-not-allowed focus:outline-none"
+                                className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                               />
                               <input
                                 type="number"
@@ -876,7 +978,7 @@ Digital Atelier`);
               </div>
             </div>
             <div className="space-y-3">
-              {CATEGORIES_META.map((cat) => {
+              {getCategoriesMeta().map((cat) => {
                 const Icon = cat.icon;
                 const activeIncs = formData.categoryInclusions?.[cat.id] || [];
                 const activeExcs = formData.categoryExclusions?.[cat.id] || [];
@@ -1095,7 +1197,7 @@ Digital Atelier`);
 
             {/* Categories List */}
             <div className="p-5 space-y-2.5">
-              {CATEGORIES_META.map((cat) => {
+              {getCategoriesMeta().map((cat) => {
                 const Icon = cat.icon;
                 const count = getActiveCatCount(cat.id);
 
@@ -1157,8 +1259,7 @@ Digital Atelier`);
         <CategoryTermsModal
           category={activeCategoryModal}
           categoryLabel={
-            CATEGORIES_META.find((c) => c.id === activeCategoryModal)?.label ||
-            ""
+            getCategoriesMeta().find((c) => c.id === activeCategoryModal)?.label || ""
           }
           initialInclusions={
             formData.categoryInclusions?.[activeCategoryModal] || []
@@ -1192,13 +1293,7 @@ Digital Atelier`);
             // Reconstruct flat arrays
             const flatIn = [];
             const flatEx = [];
-            const categoriesList = [
-              "STATUATORY",
-              "DELIVERY",
-              "PAYMENTS",
-              "TECHNICAL",
-              "GENERAL",
-            ];
+            const categoriesList = getCategoriesList();
             categoriesList.forEach((cat) => {
               if (cat === activeCategoryModal) {
                 flatIn.push(...updatedCatIn);
@@ -1349,6 +1444,17 @@ Digital Atelier`);
           </div>
         </div>
       )}
+
+      <DestinationPromptModal
+        isOpen={destPrompt.isOpen}
+        onClose={destPrompt.onCancel}
+        itemName={destPrompt.itemName}
+        itemCategory={destPrompt.category}
+        existingHeadings={destPrompt.existingHeadings}
+        headingsWithItem={destPrompt.headingsWithItem}
+        onSelect={destPrompt.onSelect}
+        onCreateNew={destPrompt.onCreateNew}
+      />
 
       {toast && (
         <Toast key={toast.id} toast={toast} onClose={() => setToast(null)} />

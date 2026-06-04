@@ -2,8 +2,8 @@ import { Fragment, useMemo } from "react";
 import { formatAmount } from "../utils/formatAmount";
 import { formatSizeRange } from "../utils/sizeRangeValidation";
 import { GST_RATE, computeTotals } from "../data/QuotePresets";
-import { assignCategoryNames } from "../utils/scopeNaming";
-import { getGlobalTerms } from "../data/termsStorage";
+import { assignCategoryNames, refreshScopeItemsFromMaster } from "../utils/scopeNaming";
+import { getGlobalTerms, getTermsCategories } from "../data/termsStorage";
 import wipLogo from "../assets/images/Logo.png";
 
 const formatDate = (iso) => {
@@ -20,8 +20,17 @@ const formatDate = (iso) => {
 // stylesheet in index.css can target it.
 const QuotePreview = ({ quote }) => {
   if (!quote) return null;
-  const { subtotal, gst, grandTotal } = computeTotals(quote.scopeItems);
-  const namedItems = assignCategoryNames(quote.scopeItems || []);
+
+  const refreshedScopeItems = useMemo(() => {
+    return refreshScopeItemsFromMaster(
+      quote.scopeItems || [],
+      quote.presetKey,
+      quote.propertyType
+    );
+  }, [quote.scopeItems, quote.presetKey, quote.propertyType]);
+
+  const { subtotal, gst, grandTotal } = computeTotals(refreshedScopeItems);
+  const namedItems = assignCategoryNames(refreshedScopeItems);
   const isSample = !!quote.isSampleQuote;
 
   // Group named items by base category (item.area)
@@ -142,30 +151,15 @@ const QuotePreview = ({ quote }) => {
       {/* Architectural Items Table */}
       <table className="w-full border-collapse">
         <thead>
-          {isSample ? (
-            <tr className="bg-black text-white uppercase text-[8px] tracking-[0.15em]">
-              <th className="py-3 px-2 text-left w-8">#</th>
-              <th className="py-3 px-2 text-left">OBJECTS</th>
-              <th className="py-3 px-2 text-left">DESCRIPTION</th>
-              <th className="py-3 px-2">UNITS</th>
-              <th className="py-3 px-2">QTY</th>
-              <th className="py-3 px-2">RATE/SQ.FT.</th>
-              <th className="py-3 px-2 text-right">AMOUNT (INR)</th>
-            </tr>
-          ) : (
-            <tr className="bg-black text-white uppercase text-[8px] tracking-[0.15em]">
-              <th className="py-3 px-2 text-left w-8">#</th>
-              <th className="py-3 px-2 text-left">OBJECTS</th>
-              <th className="py-3 px-2 text-left">DESCRIPTION</th>
-              <th className="py-3 px-2 text-center">LEN</th>
-              <th className="py-3 px-2 text-center">DEP</th>
-              <th className="py-3 px-2 text-center">HEI</th>
-              <th className="py-3 px-2 text-center">AREA</th>
-              <th className="py-3 px-2 text-center">QTY</th>
-              <th className="py-3 px-2 text-center">RATE/SQ.FT.</th>
-              <th className="py-3 px-2 text-right">AMOUNT</th>
-            </tr>
-          )}
+          <tr className="bg-black text-white uppercase text-[8px] tracking-[0.15em]">
+            <th className="py-3 px-2 text-left w-8">#</th>
+            <th className="py-3 px-2 text-left">OBJECTS</th>
+            <th className="py-3 px-2 text-left">DESCRIPTION</th>
+            <th className="py-3 px-2 text-center">UNITS</th>
+            <th className="py-3 px-2 text-center">QTY</th>
+            <th className="py-3 px-2 text-center">RATE/SQ.FT.</th>
+            <th className="py-3 px-2 text-right">AMOUNT (INR)</th>
+          </tr>
         </thead>
         <tbody>
           {groupedPreviewItems.length > 0 ? (
@@ -176,7 +170,7 @@ const QuotePreview = ({ quote }) => {
                   {/* Base category section header */}
                   <tr className="bg-slate-50/50">
                     <td
-                      colSpan={isSample ? 7 : 10}
+                      colSpan={7}
                       className="py-2 px-2 font-bold uppercase tracking-wider text-[9px] text-gray-800 bg-paleorange/10 border-b border-black/10"
                     >
                       {group.baseCat}
@@ -189,117 +183,52 @@ const QuotePreview = ({ quote }) => {
                     const amount = Number(item.amount) || 0;
                     const rate =
                       Number(item.rate) || (qty ? amount / qty : amount);
-                    if (isSample) {
-                      return (
-                        <tr
-                          key={`${globalIndex}`}
-                          className="border-b border-black align-top"
-                        >
-                          <td className="py-4 px-2 font-bold">{globalIndex}</td>
-                          <td className="py-4 px-2 font-bold uppercase text-[9px] leading-tight w-1/4">
-                            {item._displayCategory || item.area || "—"}
-                          </td>
-                          <td className="py-4 px-2 text-[11px] leading-snug">
-                            <p className="text-gray-700">
-                              {item.description || "—"}
-                            </p>
-                            {item.materials?.length > 0 && (
-                              <ul className="mt-2 space-y-1 pl-2 border-l border-paleorange/40">
-                                {item.materials.map((m, mIdx) => (
-                                  <li
-                                    key={mIdx}
-                                    className="text-[10px] text-gray-500 leading-snug"
-                                  >
-                                    <span className="font-semibold text-gray-700 uppercase tracking-wide text-[9px]">
-                                      {m.name}
-                                    </span>
-                                    <span className="text-gray-400 mx-1">
-                                      /
-                                    </span>
-                                    <span>{m.spec}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </td>
-                          <td className="py-4 px-2 text-center italic">
-                            {item.unit || "sqft"}
-                          </td>
-                          <td className="py-4 px-2 text-center">
-                            {qty.toFixed(1)}
-                          </td>
-                          <td className="py-4 px-2 text-center">
-                            {formatAmount(rate)}
-                          </td>
-                          <td className="py-4 px-2 text-right font-bold">
-                            {formatAmount(amount)}
-                          </td>
-                        </tr>
-                      );
-                    } else {
-                      return (
-                        <tr
-                          key={`${globalIndex}`}
-                          className="border-b border-black align-top"
-                        >
-                          <td className="py-4 px-2 font-bold">{globalIndex}</td>
-                          <td className="py-4 px-2 font-bold uppercase text-[9px] leading-tight w-1/4">
-                            {item._displayCategory || item.area || "—"}
-                          </td>
-                          <td className="py-4 px-2 text-[11px] leading-snug">
-                            <p className="text-gray-700">
-                              {item.description || "—"}
-                            </p>
-                            {item.materials?.length > 0 && (
-                              <ul className="mt-2 space-y-1 pl-2 border-l border-paleorange/40">
-                                {item.materials.map((m, mIdx) => (
-                                  <li
-                                    key={mIdx}
-                                    className="text-[10px] text-gray-500 leading-snug"
-                                  >
-                                    <span className="font-semibold text-gray-700 uppercase tracking-wide text-[9px]">
-                                      {m.name}
-                                    </span>
-                                    <span className="text-gray-400 mx-1">
-                                      /
-                                    </span>
-                                    <span>{m.spec}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </td>
-                          <td className="py-4 px-2 text-center tabular-nums">
-                            {item.length ? Number(item.length).toFixed(1) : "—"}
-                          </td>
-                          <td className="py-4 px-2 text-center tabular-nums">
-                            {item.breadth
-                              ? Number(item.breadth).toFixed(1)
-                              : "—"}
-                          </td>
-                          <td className="py-4 px-2 text-center tabular-nums">
-                            {item.height ? Number(item.height).toFixed(1) : "—"}
-                          </td>
-                          <td className="py-4 px-2 text-center tabular-nums">
-                            {item.calculatedArea
-                              ? Number(item.calculatedArea).toFixed(1)
-                              : (
-                                  Number(item.length || 0) *
-                                  Number(item.breadth || 0)
-                                ).toFixed(1) || "—"}
-                          </td>
-                          <td className="py-4 px-2 text-center tabular-nums">
-                            {qty.toFixed(1)}
-                          </td>
-                          <td className="py-4 px-2 text-center tabular-nums">
-                            {formatAmount(rate)}
-                          </td>
-                          <td className="py-4 px-2 text-right font-bold tabular-nums">
-                            {formatAmount(amount)}
-                          </td>
-                        </tr>
-                      );
-                    }
+                    return (
+                      <tr
+                        key={`${globalIndex}`}
+                        className="border-b border-black align-top"
+                      >
+                        <td className="py-4 px-2 font-bold">{globalIndex}</td>
+                        <td className="py-4 px-2 font-bold uppercase text-[9px] leading-tight w-1/4">
+                          {item._displayCategory || item.area || "—"}
+                        </td>
+                        <td className="py-4 px-2 text-[11px] leading-snug">
+                          <p className="text-gray-700">
+                            {item.description || "—"}
+                          </p>
+                          {item.materials?.length > 0 && (
+                            <ul className="mt-2 space-y-1 pl-2 border-l border-paleorange/40">
+                              {item.materials.map((m, mIdx) => (
+                                <li
+                                  key={mIdx}
+                                  className="text-[10px] text-gray-500 leading-snug"
+                                >
+                                  <span className="font-semibold text-gray-700 uppercase tracking-wide text-[9px]">
+                                    {m.name}
+                                  </span>
+                                  <span className="text-gray-400 mx-1">
+                                    /
+                                  </span>
+                                  <span>{m.spec}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                        <td className="py-4 px-2 text-center italic">
+                          {item.unit || "sqft"}
+                        </td>
+                        <td className="py-4 px-2 text-center">
+                          {qty.toFixed(1)}
+                        </td>
+                        <td className="py-4 px-2 text-center">
+                          {formatAmount(rate)}
+                        </td>
+                        <td className="py-4 px-2 text-right font-bold">
+                          {formatAmount(amount)}
+                        </td>
+                      </tr>
+                    );
                   })}
                 </Fragment>
               ));
@@ -307,7 +236,7 @@ const QuotePreview = ({ quote }) => {
           ) : (
             <tr className="border-b border-black">
               <td
-                colSpan={isSample ? 7 : 10}
+                colSpan={7}
                 className="py-10 text-center text-gray-300 italic uppercase tracking-widest"
               >
                 No Items Added
@@ -337,13 +266,10 @@ const QuotePreview = ({ quote }) => {
 
       {/* Category-wise Terms & Conditions display */}
       {(() => {
-        const categoriesList = [
-          { id: "STATUATORY", label: "Statutory" },
-          { id: "DELIVERY", label: "Delivery" },
-          { id: "TECHNICAL", label: "Technical" },
-          { id: "PAYMENTS", label: "Payment" },
-          { id: "GENERAL", label: "General" },
-        ];
+        const categoriesList = getTermsCategories().map((c) => ({
+          id: c.id,
+          label: c.label,
+        }));
 
         const categoriesToRender = categoriesList
           .map((cat) => {

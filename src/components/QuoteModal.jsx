@@ -20,12 +20,17 @@ import {
   Wrench,
   FileText,
   X,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  FileCheck,
 } from "lucide-react";
+import DestinationPromptModal from "./DestinationPromptModal";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import CategoryTermsModal from "./CategoryTermsModal";
-import { getGlobalTerms } from "../data/termsStorage";
+import { getGlobalTerms, getTermsCategories } from "../data/termsStorage";
 import Modal from "./Modal";
 import InputField from "./InputField";
 import MasterNavLink from "./MasterNavLink";
@@ -68,7 +73,16 @@ import {
 } from "../data/QuotePresets";
 import { computeLibraryItemAmount, computeLibraryItemArea } from "../data/itemLibrary";
 import { formatAmount } from "../utils/formatAmount";
-import { assignCategoryNames } from "../utils/scopeNaming";
+import {
+  assignCategoryNames,
+  normalizeScopeItem,
+  getDetailedDescription,
+  addScopeItemsWithDuplicateCheck,
+  refreshScopeItemsFromMaster,
+  getCategoryKey,
+  getCategoryFromItemName,
+  getHeadingCategoryKey,
+} from "../utils/scopeNaming";
 import { roomColor } from "../data/categoryColors";
 import CategorySelect from "./CategorySelect";
 import LibraryPickerModal from "./LibraryPickerModal";
@@ -310,13 +324,15 @@ const MultiSelectDropdown = ({
   );
 };
 
-const CATEGORIES_META = [
-  { id: "STATUATORY", label: "Statutory", icon: Scale },
-  { id: "DELIVERY", label: "Delivery", icon: Truck },
-  { id: "PAYMENTS", label: "Payment", icon: CreditCard },
-  { id: "TECHNICAL", label: "Technical", icon: Wrench },
-  { id: "GENERAL", label: "General", icon: FileText },
-];
+const getCategoriesMeta = () => {
+  return getTermsCategories().map((c) => ({
+    id: c.id,
+    label: c.label,
+    icon: FileCheck,
+  }));
+};
+
+const getCategoriesList = () => getTermsCategories().map((c) => c.id);
 
 const buildInitialFormData = ({
   presetKey,
@@ -348,27 +364,29 @@ const buildInitialFormData = ({
 
   // Load scope items: prefer initialQuote's saved scopeItems, then presetData's scopeItems,
   // and fallback to the master config configuration.
-  const scopeItems = initialQuote?.scopeItems
-    ? initialQuote.scopeItems.map((s) => ({
+  let scopeItems = initialQuote?.scopeItems
+    ? initialQuote.scopeItems.map((s) => normalizeScopeItem({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
       }))
     : presetData?.scopeItems
-      ? presetData.scopeItems.map((s) => ({
+      ? presetData.scopeItems.map((s) => normalizeScopeItem({
           ...s,
           materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
         }))
-      : (cfg.scopeItems || []).map((s) => ({
+      : (cfg.scopeItems || []).map((s) => normalizeScopeItem({
           ...s,
           materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
         }));
+
+  scopeItems = refreshScopeItemsFromMaster(scopeItems, activePresetKey, activePropertyType);
 
   // Load inclusions/exclusions per category with legacy support
   const categoryInclusions = {};
   const categoryExclusions = {};
   const addedInclusions = {};
   const addedExclusions = {};
-  const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+  const categoriesList = getCategoriesList();
 
   categoriesList.forEach((cat) => {
     const global = getGlobalTerms(cat);
@@ -496,6 +514,72 @@ const QuoteModal = ({
     }),
   );
 
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = "success") => {
+    setToast({ message, type, id: Date.now() });
+  };
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const [destPrompt, setDestPrompt] = useState({
+    isOpen: false,
+    itemName: "",
+    existingHeadings: [],
+    headingsWithItem: [],
+    onSelect: null,
+    onCreateNew: null,
+    onCancel: null,
+  });
+
+  const getDestinationHeading = (itemName, scopeItems, category) => {
+    return new Promise((resolve, reject) => {
+      const resolvedCategory = category || getCategoryFromItemName(itemName);
+      const itemCatKey = getCategoryKey(resolvedCategory);
+
+      // Filter existing headings to only keep those belonging to the same category
+      const existingHeadings = Array.from(
+        new Set(scopeItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
+      ).filter(h => getHeadingCategoryKey(h, scopeItems) === itemCatKey);
+
+      // Check which headings already contain this item
+      const headingsWithItem = scopeItems
+        .filter((item) => (item.itemName || "").trim().toLowerCase() === itemName.trim().toLowerCase())
+        .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
+
+      // Single Heading Exception - only if there is exactly 1 heading of the matching category
+      if (existingHeadings.length === 1) {
+        const singleHeading = existingHeadings[0];
+        if (!headingsWithItem.includes(singleHeading)) {
+          resolve(singleHeading);
+          return;
+        }
+      }
+
+      setDestPrompt({
+        isOpen: true,
+        itemName,
+        category: resolvedCategory,
+        existingHeadings,
+        headingsWithItem,
+        onSelect: (selectedHeading) => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          resolve(selectedHeading);
+        },
+        onCreateNew: (newHeading) => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          resolve(newHeading);
+        },
+        onCancel: () => {
+          setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          reject(new Error("Cancelled by user"));
+        },
+      });
+    });
+  };
+
   // Dynamic terms from the global Terms & Conditions master.
   // Only default items are auto-displayed; non-defaults are added via modal.
   const [termOptions, setTermOptions] = useState(() => {
@@ -520,12 +604,13 @@ const QuoteModal = ({
   const [activeCategoryModal, setActiveCategoryModal] = useState(null);
   const [termsParentModalOpen, setTermsParentModalOpen] = useState(false);
 
-  const [expandedCategories, setExpandedCategories] = useState({
-    STATUATORY: true,
-    DELIVERY: false,
-    PAYMENTS: false,
-    TECHNICAL: false,
-    GENERAL: false,
+  const [expandedCategories, setExpandedCategories] = useState(() => {
+    const cats = getTermsCategories();
+    const initial = {};
+    cats.forEach((c, idx) => {
+      initial[c.id] = idx === 0;
+    });
+    return initial;
   });
 
   const [openGroups, setOpenGroups] = useState({});
@@ -589,7 +674,7 @@ const QuoteModal = ({
     const categoryExclusions = {};
     const addedInclusions = {};
     const addedExclusions = {};
-    const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+    const categoriesList = getCategoriesList();
     categoriesList.forEach((cat) => {
       const global = getGlobalTerms(cat);
       categoryInclusions[cat] = global.inclusions.filter((t) => t.isDefault).map((t) => t.text);
@@ -609,7 +694,7 @@ const QuoteModal = ({
       ...prev,
       propertyType: cfg.propertyType,
       sizeRange: cleanSizeRange(cfg.sizeRange),
-      scopeItems: (cfg.scopeItems || []).map((s) => ({
+      scopeItems: (cfg.scopeItems || []).map((s) => normalizeScopeItem({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
       })),
@@ -638,7 +723,7 @@ const QuoteModal = ({
     const categoryExclusions = {};
     const addedInclusions = {};
     const addedExclusions = {};
-    const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+    const categoriesList = getCategoriesList();
     categoriesList.forEach((cat) => {
       const global = getGlobalTerms(cat);
       categoryInclusions[cat] = global.inclusions.filter((t) => t.isDefault).map((t) => t.text);
@@ -658,7 +743,7 @@ const QuoteModal = ({
       ...prev,
       propertyType: cfg.propertyType,
       sizeRange: cleanSizeRange(cfg.sizeRange),
-      scopeItems: (cfg.scopeItems || []).map((s) => ({
+      scopeItems: (cfg.scopeItems || []).map((s) => normalizeScopeItem({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
       })),
@@ -690,7 +775,7 @@ const QuoteModal = ({
   };
 
   const toggleInclusion = (item, forcedCat = null) => {
-    const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+    const categoriesList = getCategoriesList();
     let foundCat = forcedCat;
     if (!foundCat) {
       foundCat = "GENERAL";
@@ -728,7 +813,7 @@ const QuoteModal = ({
   };
 
   const toggleExclusion = (item, forcedCat = null) => {
-    const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+    const categoriesList = getCategoriesList();
     let foundCat = forcedCat;
     if (!foundCat) {
       foundCat = "GENERAL";
@@ -767,10 +852,35 @@ const QuoteModal = ({
 
   const updateScope = (idx, key, value) => {
     setFormData((p) => {
+      // Check for duplicate heading if changing the area/heading field
+      if (key === "area") {
+        const item = p.scopeItems[idx];
+        const newHeading = value.trim().toUpperCase();
+        const duplicateExists = p.scopeItems.some((s, i) => {
+          if (i === idx) return false;
+          return (
+            (s.area || s.heading || "").trim().toUpperCase() === newHeading &&
+            (s.itemName || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()
+          );
+        });
+
+        if (duplicateExists) {
+          showToast(`"${item.itemName}" already exists under heading "${newHeading}".`, "error");
+          return p;
+        }
+      }
+
       const nextItems = p.scopeItems.map((s, i) => {
         if (i !== idx) return s;
         
         let target = { ...s, [key]: value };
+
+        if (key === "description") {
+          target.isDescriptionCustom = true;
+        }
+        if (key === "area") {
+          target.isAreaCustom = true;
+        }
         
         if (key === "length" || key === "breadth" || key === "qty" || key === "rate") {
           const L = Number(target.length) || 0;
@@ -790,32 +900,42 @@ const QuoteModal = ({
   };
 
   // Handler for direct library picker — maps library item to scope row shape.
-  const handleLibraryPick = (lib) => {
-    // Seed the schedule duration: prefer the item's own days, else fall back to
-    // the default configured for its room category (Master → Schedule).
-    const days =
-      lib.days != null && lib.days !== ""
-        ? lib.days
-        : getRoomDefaultDays(lib.category);
-    const newRow = {
-      area: lib.category || "",
-      description: lib.description || "",
-      length: lib.length != null ? Number(lib.length) : "",
-      breadth: lib.breadth != null ? Number(lib.breadth) : "",
-      height: lib.height != null ? Number(lib.height) : "",
-      calculatedArea: computeLibraryItemArea(lib) || 0,
-      qty: lib.qty != null ? Number(lib.qty) : "",
-      rate: lib.rate != null ? Number(lib.rate) : "",
-      amount: computeLibraryItemAmount(lib) || 0,
-      unit: lib.unit || "sqft",
-      days,
-      materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
-    };
-    setFormData((p) => ({
-      ...p,
-      scopeItems: [...p.scopeItems, newRow],
-    }));
-    setLibraryPickerOpen(false);
+  const handleLibraryPick = async (lib) => {
+    try {
+      const itemName = lib.description || "";
+      const heading = await getDestinationHeading(itemName, formData.scopeItems, lib.category);
+
+      // Seed the schedule duration: prefer the item's own days, else fall back to
+      // the default configured for its room category (Master → Schedule).
+      const days =
+        lib.days != null && lib.days !== ""
+          ? lib.days
+          : getRoomDefaultDays(lib.category);
+      const norm = normalizeScopeItem({
+        area: heading,
+        description: lib.description || "",
+      });
+      const newRow = {
+        ...norm,
+        length: lib.length != null ? Number(lib.length) : "",
+        breadth: lib.breadth != null ? Number(lib.breadth) : "",
+        height: lib.height != null ? Number(lib.height) : "",
+        calculatedArea: computeLibraryItemArea(lib) || 0,
+        qty: lib.qty != null ? Number(lib.qty) : "",
+        rate: lib.rate != null ? Number(lib.rate) : "",
+        amount: computeLibraryItemAmount(lib) || 0,
+        unit: lib.unit || "sqft",
+        days,
+        materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
+      };
+      setFormData((p) => ({
+        ...p,
+        scopeItems: addScopeItemsWithDuplicateCheck(p.scopeItems, [newRow]),
+      }));
+      setLibraryPickerOpen(false);
+    } catch (err) {
+      setLibraryPickerOpen(false);
+    }
   };
 
   const removeScopeRow = (idx) => {
@@ -1265,16 +1385,17 @@ const QuoteModal = ({
                             <div className="flex items-center justify-between text-[10px] text-text-muted font-bold tracking-wide uppercase">
                               <span>{item._displayCategory}</span>
                             </div>
-                            <div className="grid grid-cols-[1fr_1.5fr_110px_28px] gap-2 items-start">
-                              <CategorySelect
-                                value={item.area}
-                                onChange={(v) => updateScope(idx, "area", v)}
-                                placeholder="Room…"
-                                className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full cursor-pointer focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
+                            <div className="grid grid-cols-[1fr_1.5fr_110px] gap-2 items-start">
+                              <input
+                                type="text"
+                                value={item.area || ""}
+                                onChange={(e) => updateScope(idx, "area", e.target.value.toUpperCase())}
+                                placeholder="Heading/Room…"
+                                className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                               />
                               <input
                                 type="text"
-                                value={item.description}
+                                value={item.description || ""}
                                 onChange={(e) =>
                                   updateScope(idx, "description", e.target.value)
                                 }
@@ -1290,77 +1411,6 @@ const QuoteModal = ({
                                 placeholder="₹"
                                 className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300 text-right"
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeScopeRow(idx)}
-                                className="h-8 w-7 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-colors"
-                                title="Remove row"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-
-                            {/* Dimensions row */}
-                            <div className="grid grid-cols-6 gap-2 pt-1 border-t border-dashed border-bordergray">
-                              <div>
-                                <label className="block text-[9px] font-bold text-text-muted  mb-0.5">L (ft)</label>
-                                <input
-                                  type="number"
-                                  placeholder="0.0"
-                                  value={item.length ?? ""}
-                                  onChange={(e) => updateScope(idx, "length", e.target.value)}
-                                  className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-1.5 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-text-muted  mb-0.5">D (ft)</label>
-                                <input
-                                  type="number"
-                                  placeholder="0.0"
-                                  value={item.breadth ?? ""}
-                                  onChange={(e) => updateScope(idx, "breadth", e.target.value)}
-                                  className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-1.5 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-text-muted  mb-0.5">H (ft)</label>
-                                <input
-                                  type="number"
-                                  placeholder="0.0"
-                                  value={item.height ?? ""}
-                                  onChange={(e) => updateScope(idx, "height", e.target.value)}
-                                  className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-1.5 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-text-muted mb-0.5">AREA</label>
-                                <input
-                                  type="text"
-                                  readOnly
-                                  value={item.calculatedArea ? Number(item.calculatedArea).toFixed(2) : "0.00"}
-                                  className="bg-bg-soft border border-bordergray text-[11px] text-text-muted rounded-md px-2 py-1.5 w-full cursor-not-allowed focus:outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-text-muted uppercase mb-0.5">QTY</label>
-                                <input
-                                  type="number"
-                                  placeholder="Use Area"
-                                  value={item.qty ?? ""}
-                                  onChange={(e) => updateScope(idx, "qty", e.target.value)}
-                                  className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-1.5 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-text-muted uppercase mb-0.5">RATE ₹</label>
-                                <input
-                                  type="number"
-                                  placeholder="Rate"
-                                  value={item.rate ?? ""}
-                                  onChange={(e) => updateScope(idx, "rate", e.target.value)}
-                                  className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-1.5 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300 text-right"
-                                />
-                              </div>
                             </div>
 
                             {/* Material specs */}
@@ -1445,7 +1495,7 @@ const QuoteModal = ({
                       const categoryExclusions = {};
                       const addedInclusions = {};
                       const addedExclusions = {};
-                      const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+                      const categoriesList = getCategoriesList();
                       categoriesList.forEach((cat) => {
                         const global = getGlobalTerms(cat);
                         categoryInclusions[cat] = global.inclusions.filter((t) => t.isDefault).map((t) => t.text);
@@ -1493,7 +1543,7 @@ const QuoteModal = ({
               </div>
             </div>
             <div className="space-y-3">
-              {CATEGORIES_META.map((cat) => {
+              {getCategoriesMeta().map((cat) => {
                 const Icon = cat.icon;
                 const activeIncs = formData.categoryInclusions?.[cat.id] || [];
                 const activeExcs = formData.categoryExclusions?.[cat.id] || [];
@@ -1694,7 +1744,7 @@ const QuoteModal = ({
 
             {/* Categories List */}
             <div className="p-5 space-y-2.5">
-              {CATEGORIES_META.map((cat) => {
+              {getCategoriesMeta().map((cat) => {
                 const Icon = cat.icon;
                 const count = getActiveCatCount(cat.id);
 
@@ -1753,7 +1803,7 @@ const QuoteModal = ({
         <CategoryTermsModal
           category={activeCategoryModal}
           categoryLabel={
-            CATEGORIES_META.find((c) => c.id === activeCategoryModal)?.label || ""
+            getCategoriesMeta().find((c) => c.id === activeCategoryModal)?.label || ""
           }
           initialInclusions={formData.categoryInclusions?.[activeCategoryModal] || []}
           initialExclusions={formData.categoryExclusions?.[activeCategoryModal] || []}
@@ -1779,7 +1829,7 @@ const QuoteModal = ({
             // Reconstruct flat arrays
             const flatIn = [];
             const flatEx = [];
-            const categoriesList = ["STATUATORY", "DELIVERY", "PAYMENTS", "TECHNICAL", "GENERAL"];
+            const categoriesList = getCategoriesList();
             categoriesList.forEach((cat) => {
               if (cat === activeCategoryModal) {
                 flatIn.push(...updatedCatIn);
@@ -1830,7 +1880,49 @@ const QuoteModal = ({
           }}
         />
       )}
+
+      <DestinationPromptModal
+        isOpen={destPrompt.isOpen}
+        onClose={destPrompt.onCancel}
+        itemName={destPrompt.itemName}
+        itemCategory={destPrompt.category}
+        existingHeadings={destPrompt.existingHeadings}
+        headingsWithItem={destPrompt.headingsWithItem}
+        onSelect={destPrompt.onSelect}
+        onCreateNew={destPrompt.onCreateNew}
+      />
+
+      {toast && (
+        <Toast key={toast.id} toast={toast} onClose={() => setToast(null)} />
+      )}
     </Modal>
+  );
+};
+
+const Toast = ({ toast, onClose }) => {
+  const variants = {
+    success: { bg: "bg-emerald-500", icon: <CheckCircle2 size={14} /> },
+    error: { bg: "bg-red-500", icon: <AlertTriangle size={14} /> },
+    info: { bg: "bg-select-blue", icon: <Info size={14} /> },
+  };
+  const v = variants[toast.type] || variants.info;
+  return (
+    <div className="fixed top-6 right-6 z-[10000] animate-[slideIn_0.2s_ease-out]">
+      <div
+        className={`${v.bg} text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-2.5 min-w-[260px] max-w-md`}
+      >
+        <span className="shrink-0">{v.icon}</span>
+        <p className="text-[12px] font-medium flex-1">{toast.message}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-white/80 hover:text-white shrink-0"
+          title="Dismiss"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    </div>
   );
 };
 

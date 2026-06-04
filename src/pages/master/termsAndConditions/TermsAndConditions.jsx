@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Plus,
   Trash2,
@@ -9,13 +10,16 @@ import {
   Save,
   FileCheck,
   Star,
-  Scale,
-  Truck,
-  CreditCard,
-  Wrench,
-  FileText,
+  Edit2,
 } from "lucide-react";
-import { getGlobalTerms, saveGlobalTerms } from "../../../data/termsStorage";
+import {
+  getGlobalTerms,
+  saveGlobalTerms,
+  getTermsCategories,
+  addTermsCategory,
+  deleteTermsCategory,
+  renameTermsCategory,
+} from "../../../data/termsStorage";
 
 const ListEditor = ({
   title,
@@ -79,8 +83,6 @@ const ListEditor = ({
   };
 
   const handleToggleAllDefault = () => {
-    // If all valid items are already default, clear all defaults;
-    // otherwise mark every item as default.
     const valid = items.filter((i) => i.text.trim() !== "");
     const allDefault = valid.length > 0 && valid.every((i) => i.isDefault);
     setItems(items.map((i) => ({ ...i, isDefault: !allDefault })));
@@ -231,24 +233,50 @@ const ListEditor = ({
 };
 
 const TermsAndConditions = () => {
-  const categories = [
-    { id: "STATUATORY", label: "Statutory", desc: "Legal & regulatory compliance", icon: Scale },
-    { id: "DELIVERY", label: "Delivery", desc: "Logistics, carriage & schedule", icon: Truck },
-    { id: "PAYMENTS", label: "Payments", desc: "Deposits, milestones & invoicing", icon: CreditCard },
-    { id: "TECHNICAL", label: "Technical", desc: "Drawings, dimensions & specs", icon: Wrench },
-    { id: "GENERAL", label: "General", desc: "Validity, taxes & standard terms", icon: FileText },
-  ];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subFromUrl = searchParams.get("sub");
 
-  const [selectedCategory, setSelectedCategory] = useState("STATUATORY");
+  const [categories, setCategories] = useState(() => getTermsCategories());
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    const cats = getTermsCategories();
+    if (subFromUrl && cats.some((c) => c.id === subFromUrl)) {
+      return subFromUrl;
+    }
+    return cats.length > 0 ? cats[0].id : "STATUATORY";
+  });
+
   const [localData, setLocalData] = useState({
     inclusions: [],
     exclusions: [],
   });
 
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    mode: "create", // "create" or "rename"
+    catId: "",
+    inputValue: "",
+    descValue: "",
+    error: "",
+  });
+
+  const [deleteConfirmState, setDeleteConfirmState] = useState({
+    isOpen: false,
+    catId: "",
+    catLabel: "",
+  });
+
   useEffect(() => {
-    const data = getGlobalTerms(selectedCategory);
-    setLocalData(data);
-  }, [selectedCategory]);
+    if (subFromUrl && categories.some((c) => c.id === subFromUrl) && selectedCategory !== subFromUrl) {
+      setSelectedCategory(subFromUrl);
+    }
+  }, [subFromUrl, categories, selectedCategory]);
+
+  useEffect(() => {
+    if (selectedCategory) {
+      const data = getGlobalTerms(selectedCategory);
+      setLocalData(data);
+    }
+  }, [selectedCategory, categories]);
 
   const handleListSave = (key, newItems) => {
     const updatedData = { ...localData, [key]: newItems };
@@ -264,7 +292,102 @@ const TermsAndConditions = () => {
     return (data.inclusions?.length || 0) + (data.exclusions?.length || 0);
   };
 
-  const activeCategoryMeta = categories.find((c) => c.id === selectedCategory) || categories[0];
+  const handleOpenCreateModal = () => {
+    setModalState({
+      isOpen: true,
+      mode: "create",
+      catId: "",
+      inputValue: "",
+      descValue: "",
+      error: "",
+    });
+  };
+
+  const handleOpenRenameModal = (id, currentLabel) => {
+    const cat = categories.find((c) => c.id === id);
+    setModalState({
+      isOpen: true,
+      mode: "rename",
+      catId: id,
+      inputValue: currentLabel,
+      descValue: cat?.desc || "",
+      error: "",
+    });
+  };
+
+  const handleSelectCategory = (catId) => {
+    setSelectedCategory(catId);
+    setSearchParams({ tab: "terms", sub: catId });
+  };
+
+  const handleModalSubmit = (e) => {
+    e.preventDefault();
+    const name = modalState.inputValue.trim();
+    const desc = modalState.descValue.trim();
+    if (!name) {
+      setModalState((prev) => ({ ...prev, error: "Please enter a category name." }));
+      return;
+    }
+
+    if (modalState.mode === "create") {
+      try {
+        const newCat = addTermsCategory(name, desc || undefined);
+        const updatedCats = getTermsCategories();
+        setCategories(updatedCats);
+        setSelectedCategory(newCat.id);
+        setSearchParams({ tab: "terms", sub: newCat.id });
+        setModalState({ isOpen: false, mode: "create", catId: "", inputValue: "", descValue: "", error: "" });
+      } catch (err) {
+        setModalState((prev) => ({ ...prev, error: err.message || "Failed to create category." }));
+      }
+    } else {
+      // rename mode
+      renameTermsCategory(modalState.catId, name, desc);
+      const updatedCats = getTermsCategories();
+      setCategories(updatedCats);
+      setModalState({ isOpen: false, mode: "create", catId: "", inputValue: "", descValue: "", error: "" });
+    }
+  };
+
+  const handleOpenDeleteConfirm = (id, label) => {
+    setDeleteConfirmState({
+      isOpen: true,
+      catId: id,
+      catLabel: label,
+    });
+  };
+
+  const handleConfirmDelete = () => {
+    const id = deleteConfirmState.catId;
+    if (!id) return;
+
+    deleteTermsCategory(id);
+    const updatedCats = getTermsCategories();
+    setCategories(updatedCats);
+
+    // Reset selected category if we deleted the current one
+    if (selectedCategory === id) {
+      const nextCatId = updatedCats.length > 0 ? updatedCats[0].id : "";
+      setSelectedCategory(nextCatId);
+      if (nextCatId) {
+        setSearchParams({ tab: "terms", sub: nextCatId });
+      } else {
+        setSearchParams({ tab: "terms" });
+      }
+    }
+
+    setDeleteConfirmState({
+      isOpen: false,
+      catId: "",
+      catLabel: "",
+    });
+  };
+
+  const activeCategoryMeta = categories.find((c) => c.id === selectedCategory) || categories[0] || {
+    id: "",
+    label: "Terms & Conditions",
+    desc: "",
+  };
 
   return (
     <div className="bg-overallbg font-sans h-full overflow-y-auto pb-28">
@@ -285,10 +408,19 @@ const TermsAndConditions = () => {
                 </span>
               </div>
               <p className="text-[12px] text-text-muted mt-0.5">
-                Configure global inclusions and exclusions across all five standard categories
+                Configure global inclusions and exclusions across all terms categories
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleOpenCreateModal}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-linear-to-br from-select-blue to-primary text-white text-[11.5px] font-bold hover:shadow-md transition-all cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Add Category</span>
+          </button>
         </div>
       </div>
 
@@ -296,14 +428,13 @@ const TermsAndConditions = () => {
       <div className="px-6 pt-5">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {categories.map((cat) => {
-            const Icon = cat.icon;
             const isActive = selectedCategory === cat.id;
             const counts = getCategoryCount(cat.id);
             return (
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => handleSelectCategory(cat.id)}
                 className={`flex flex-col items-start text-left p-3.5 rounded-xl border transition-all duration-200 shadow-xs cursor-pointer group ${
                   isActive
                     ? "bg-linear-to-br from-select-blue to-primary text-white border-transparent shadow-md shadow-select-blue/10 scale-[1.01]"
@@ -318,23 +449,55 @@ const TermsAndConditions = () => {
                         : "bg-select-blue/5 text-select-blue group-hover:bg-select-blue/10"
                     }`}
                   >
-                    <Icon size={15} />
+                    <FileCheck size={15} />
                   </div>
-                  <span
-                    className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
-                      isActive
-                        ? "bg-white/20 text-white"
-                        : "bg-bg-soft text-text-muted border border-bordergray"
-                    }`}
-                  >
-                    {counts} {counts === 1 ? "item" : "items"}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-bg-soft text-text-muted border border-bordergray"
+                      }`}
+                    >
+                      {counts} {counts === 1 ? "item" : "items"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenRenameModal(cat.id, cat.label);
+                      }}
+                      className={`p-1 rounded-md transition-colors ${
+                        isActive
+                          ? "text-white/80 hover:text-white hover:bg-white/10"
+                          : "text-text-subtle hover:text-select-blue hover:bg-select-blue/5"
+                      }`}
+                      title="Rename category"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenDeleteConfirm(cat.id, cat.label);
+                      }}
+                      className={`p-1 rounded-md transition-colors ${
+                        isActive
+                          ? "text-white/80 hover:text-white hover:bg-white/10"
+                          : "text-text-subtle hover:text-red-500 hover:bg-red-50"
+                      }`}
+                      title="Delete category"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
                 <h3 className={`text-[12.5px] font-bold mt-3 leading-tight transition-colors ${isActive ? "text-white" : "text-textcolor"}`}>
                   {cat.label}
                 </h3>
                 <p className={`text-[10px] mt-1 transition-colors leading-normal ${isActive ? "text-white/80" : "text-text-muted"}`}>
-                  {cat.desc}
+                  {cat.desc || "Custom Terms & Conditions category"}
                 </p>
               </button>
             );
@@ -343,28 +506,142 @@ const TermsAndConditions = () => {
       </div>
 
       {/* Lists Editor Section */}
-      <div className="px-6 py-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-          <ListEditor
-            key={`${selectedCategory}-inclusions`}
-            title={`${activeCategoryMeta.label} Inclusions`}
-            icon={<CheckCircle2 size={13} className="text-emerald-600" />}
-            accent="emerald"
-            initialItems={localData.inclusions || []}
-            onSave={(newItems) => handleListSave("inclusions", newItems)}
-            placeholder={`e.g. ${activeCategoryMeta.label} standard inclusions`}
-          />
-          <ListEditor
-            key={`${selectedCategory}-exclusions`}
-            title={`${activeCategoryMeta.label} Exclusions`}
-            icon={<XCircle size={13} className="text-red-500" />}
-            accent="red"
-            initialItems={localData.exclusions || []}
-            onSave={(newItems) => handleListSave("exclusions", newItems)}
-            placeholder={`e.g. ${activeCategoryMeta.label} standard exclusions`}
-          />
+      {selectedCategory && (
+        <div className="px-6 py-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            <ListEditor
+              key={`${selectedCategory}-inclusions`}
+              title={`${activeCategoryMeta.label} Inclusions`}
+              icon={<CheckCircle2 size={13} className="text-emerald-600" />}
+              accent="emerald"
+              initialItems={localData.inclusions || []}
+              onSave={(newItems) => handleListSave("inclusions", newItems)}
+              placeholder={`e.g. ${activeCategoryMeta.label} standard inclusions`}
+            />
+            <ListEditor
+              key={`${selectedCategory}-exclusions`}
+              title={`${activeCategoryMeta.label} Exclusions`}
+              icon={<XCircle size={13} className="text-red-500" />}
+              accent="red"
+              initialItems={localData.exclusions || []}
+              onSave={(newItems) => handleListSave("exclusions", newItems)}
+              placeholder={`e.g. ${activeCategoryMeta.label} standard exclusions`}
+            />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Category Modal (Create / Rename) */}
+      {modalState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white rounded-2xl border border-bordergray shadow-2xl p-6 mx-4"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[14px] font-bold text-textcolor">
+                {modalState.mode === "create" ? "Add New Category" : "Rename Category"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalState({ isOpen: false, mode: "create", catId: "", inputValue: "", descValue: "", error: "" })}
+                className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-bg-soft"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleModalSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold text-text-muted mb-1">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Installation Support"
+                  value={modalState.inputValue}
+                  onChange={(e) => setModalState((prev) => ({ ...prev, inputValue: e.target.value, error: "" }))}
+                  className="bg-bg-soft border border-bordergray text-[12px] text-textcolor rounded-lg px-3 py-2 w-full focus:outline-none focus:bg-white focus:border-select-blue"
+                  autoFocus
+                />
+                {modalState.error && (
+                  <p className="text-red-500 text-[10.5px] font-medium mt-1">
+                    {modalState.error}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-text-muted mb-1">
+                  Description / Sub Category
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Installation assistance and guidelines"
+                  value={modalState.descValue}
+                  onChange={(e) => setModalState((prev) => ({ ...prev, descValue: e.target.value }))}
+                  className="bg-bg-soft border border-bordergray text-[12px] text-textcolor rounded-lg px-3 py-2 w-full focus:outline-none focus:bg-white focus:border-select-blue"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalState({ isOpen: false, mode: "create", catId: "", inputValue: "", descValue: "", error: "" })}
+                  className="px-4 py-2 rounded-lg border border-bordergray text-[11.5px] font-bold text-text-muted hover:bg-bg-soft"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-linear-to-br from-select-blue to-primary text-white text-[11.5px] font-bold hover:shadow-md"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-white rounded-2xl border border-bordergray shadow-2xl p-6 mx-4 text-center"
+          >
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-50 text-red-600 mb-4">
+              <Trash2 size={20} />
+            </div>
+            
+            <h3 className="text-[14px] font-bold text-textcolor mb-2">
+              Delete Category
+            </h3>
+            
+            <p className="text-[11.5px] text-text-muted leading-relaxed mb-6">
+              Are you sure you want to delete the category <span className="font-bold text-textcolor">"{deleteConfirmState.catLabel}"</span>? 
+              This action cannot be undone and will remove it permanently.
+            </p>
+            
+            <div className="flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmState({ isOpen: false, catId: "", catLabel: "" })}
+                className="px-4 py-2 rounded-lg border border-bordergray text-[11.5px] font-bold text-text-muted hover:bg-bg-soft cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11.5px] font-bold hover:shadow-md cursor-pointer transition-all"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

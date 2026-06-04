@@ -9,14 +9,17 @@ import { useNavigate } from "react-router-dom";
  * - Pointer cursor
  * - Hover effect
  */
-const MasterNavLink = ({ text = "Master Module", tab = "terms" }) => {
+const MasterNavLink = ({ text = "Master Module", tab = "terms", sub }) => {
   const navigate = useNavigate();
 
   const handleClick = (e) => {
     e.preventDefault();
     // Navigate to /master using useNavigate.
     // If a tab is specified, e.g. "terms", go straight there!
-    const targetPath = tab ? `/master?tab=${tab}` : "/master";
+    let targetPath = tab ? `/master?tab=${tab}` : "/master";
+    if (tab === "terms" && sub) {
+      targetPath += `&sub=${sub}`;
+    }
     navigate(targetPath);
   };
 
