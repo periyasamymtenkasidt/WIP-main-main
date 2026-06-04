@@ -45,6 +45,7 @@ import {
   getPropertyTypesForPreset,
   getConfigForType,
 } from "../../data/QuotePresets";
+import { formatSizeRange } from "../../utils/sizeRangeValidation";
 
 const DEFAULT_PRESET = "2BHK";
 
@@ -382,8 +383,7 @@ function EditInquiryform({ initialData, onClose, onAddLead }) {
                     Size Range
                   </span>
                   <strong className="text-text">
-                    {`${getConfigForType(quotePreset, propertyType)?.sizeRange ||
-                      "—"} sq ft`}
+                    {formatSizeRange(getConfigForType(quotePreset, propertyType)?.sizeRange)}
                   </strong>
                 </span>
                 {presetTotals && (

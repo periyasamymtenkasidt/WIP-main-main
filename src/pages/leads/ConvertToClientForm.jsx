@@ -40,6 +40,7 @@ import {
   getPropertyTypesForPreset,
   getLatestQuoteForParent,
 } from "../../data/QuotePresets";
+import { formatSizeRange } from "../../utils/sizeRangeValidation";
 
 // Parse a lead's investment range (e.g. "₹60L-70L", "₹50L – ₹1Cr", "₹1-1.2Cr")
 // and return the midpoint as a number, used to auto-suggest the confirmed
@@ -272,7 +273,7 @@ function ConvertToClientForm({ lead, onClose, onConvert }) {
                 {activePropertyType ? ` / ${activePropertyType}` : ""}
               </p>
               <p className="text-[11px] text-text-muted mt-0.5">
-                {activeSizeRange || "—"}
+                {formatSizeRange(activeSizeRange)}
               </p>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-text-subtle">

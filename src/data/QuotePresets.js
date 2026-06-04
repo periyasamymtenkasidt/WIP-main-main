@@ -4,6 +4,7 @@
 // localStorage from the Settings → Proposal Master page.
 
 import { getRoomDefaultDays } from "./scheduleConfig";
+import { cleanSizeRange } from "../utils/sizeRangeValidation";
 
 export const GST_RATE = 18;
 
@@ -181,7 +182,7 @@ const normalizePreset = (p) => {
   if (Array.isArray(next.configurations) && next.configurations.length > 0) {
     next.configurations = next.configurations.map((c) => ({
       propertyType: c.propertyType || "",
-      sizeRange: c.sizeRange ?? next.sizeRange ?? "",
+      sizeRange: cleanSizeRange(c.sizeRange ?? next.sizeRange ?? ""),
       scopeItems: (c.scopeItems || []).map(mapScopeItem),
       inclusions: c.inclusions || [],
       exclusions: c.exclusions || [],
@@ -209,7 +210,7 @@ const normalizePreset = (p) => {
 
   next.configurations = types.map((t) => ({
     propertyType: t,
-    sizeRange: sharedSize,
+    sizeRange: cleanSizeRange(sharedSize),
     scopeItems: sharedScope.map(mapScopeItem),
     inclusions: [...sharedInclusions],
     exclusions: [...sharedExclusions],

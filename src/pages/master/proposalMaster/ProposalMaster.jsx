@@ -48,6 +48,7 @@ import {
   DEFAULT_PRESETS,
 } from "../../../data/QuotePresets";
 import { formatAmount } from "../../../utils/formatAmount";
+import { validateSizeRangeInput } from "../../../utils/sizeRangeValidation";
 import { assignCategoryNames } from "../../../utils/scopeNaming";
 import ItemFormModal from "../../../components/ItemFormModal";
 import Modal from "../../../components/Modal";
@@ -222,6 +223,7 @@ const ProposalMaster = () => {
   const [presetSearch, setPresetSearch] = useState("");
   const [sortBy, setSortBy] = useState("order");
   const [toast, setToast] = useState(null);
+  const [sizeRangeError, setSizeRangeError] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   // Whether the shared Item Form modal is open for adding a new scope row.
@@ -274,7 +276,12 @@ const ProposalMaster = () => {
   // Reset config tab when switching presets
   useEffect(() => {
     setActiveConfigIdx(0);
+    setSizeRangeError("");
   }, [activeKey]);
+
+  useEffect(() => {
+    setSizeRangeError("");
+  }, [activeConfigIdx]);
 
   // Derived: the currently-active property-type configuration
   const activeConfig =
@@ -620,6 +627,13 @@ const ProposalMaster = () => {
   };
 
   const handleManualSave = () => {
+    const currentSizeRange = activeConfig?.sizeRange || "";
+    const err = validateSizeRangeInput(currentSizeRange);
+    if (err) {
+      showToast(err, "error");
+      setSizeRangeError(err);
+      return;
+    }
     saveMaster(master);
     setHasChanges(false);
     setSavedFlash(true);
@@ -1068,18 +1082,31 @@ const ProposalMaster = () => {
                   label="Size Range"
                   hint="Per property type · used to compute ₹/sq ft"
                 >
-                  <input
-                    type="text"
-                    value={activeConfig?.sizeRange || ""}
-                    onChange={(e) =>
-                      setConfigField((cfg) => ({
-                        ...cfg,
-                        sizeRange: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. 800–1100"
-                    className={inputBase}
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={activeConfig?.sizeRange || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const err = validateSizeRangeInput(val);
+                        setSizeRangeError(err);
+                        setConfigField((cfg) => ({
+                          ...cfg,
+                          sizeRange: val,
+                        }));
+                      }}
+                      placeholder="e.g. 800-1100"
+                      className={`${inputBase} pr-14`}
+                    />
+                    <span className="absolute right-3 text-[10px] font-bold text-gray-400 pointer-events-none uppercase">
+                      Sq Ft
+                    </span>
+                  </div>
+                  {sizeRangeError && (
+                    <p className="text-red-500 text-[10px] mt-1 font-semibold animate-pulse">
+                      {sizeRangeError}
+                    </p>
+                  )}
                 </Field>
               </div>
 

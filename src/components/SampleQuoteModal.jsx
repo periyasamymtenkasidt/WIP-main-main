@@ -36,6 +36,7 @@ import {
 } from "../data/QuotePresets";
 import { computeLibraryItemAmount } from "../data/itemLibrary";
 import { formatAmount } from "../utils/formatAmount";
+import { formatSizeRange } from "../utils/sizeRangeValidation";
 import { assignCategoryNames } from "../utils/scopeNaming";
 import { roomColor } from "../data/categoryColors";
 import CategorySelect from "./CategorySelect";
@@ -655,7 +656,7 @@ Digital Atelier`);
                   {formData.propertyType ? ` / ${formData.propertyType}` : ""}
                 </p>
                 <p className="text-[11px] text-text-muted mt-0.5">
-                  {formData.sizeRange || ""}
+                  {formatSizeRange(formData.sizeRange)}
                 </p>
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-subtle">

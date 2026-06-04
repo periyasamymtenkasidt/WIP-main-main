@@ -34,6 +34,8 @@ import {
   getNonDefaultTermStrings,
 } from "../data/termsStorage";
 
+import { cleanSizeRange, validateSizeRangeInput, formatSizeRange } from "../utils/sizeRangeValidation";
+
 const quoteRecipientSchema = yup.object().shape({
   recipientName: yup.string().required("Recipient name required"),
   recipientEmail: yup
@@ -41,6 +43,19 @@ const quoteRecipientSchema = yup.object().shape({
     .required("Email Address is required")
     .trim()
     .matches(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Enter a valid email address"),
+  sizeRange: yup
+    .string()
+    .required("Size Range is required")
+    .test(
+      "isValidSizeRange",
+      function (value) {
+        const errMsg = validateSizeRangeInput(value);
+        if (errMsg) {
+          return this.createError({ message: errMsg });
+        }
+        return true;
+      }
+    ),
 });
 import QuotePreview from "./QuotePreview";
 import {
@@ -426,8 +441,9 @@ const buildInitialFormData = ({
     recipientEmail: recipient?.email || initialQuote?.recipientEmail || "",
     recipientPhone: recipient?.phone || initialQuote?.recipientPhone || "",
     propertyType: activePropertyType,
-    sizeRange:
-      presetData?.sizeRange || cfg.sizeRange || initialQuote?.sizeRange || "",
+    sizeRange: cleanSizeRange(
+      presetData?.sizeRange || cfg.sizeRange || initialQuote?.sizeRange || ""
+    ),
     validityDays: presetData?.validityDays || initialQuote?.validityDays || 30,
     scopeItems,
     inclusions: flatIn,
@@ -542,13 +558,17 @@ const QuoteModal = ({
     handleSubmit: rhfHandleSubmit,
     formState: { errors },
     setValue: rhfSetValue,
+    watch,
   } = useForm({
     resolver: yupResolver(quoteRecipientSchema),
     defaultValues: {
       recipientName: formData.recipientName,
       recipientEmail: formData.recipientEmail,
+      sizeRange: cleanSizeRange(formData.sizeRange),
     },
   });
+
+  const watchedSizeRange = watch("sizeRange");
 
   const [isSending, setIsSending] = useState(false);
   // Controls the library picker modal for "Pick from Library" flow.
@@ -584,10 +604,11 @@ const QuoteModal = ({
       flatEx.push(...(categoryExclusions[cat] || []));
     });
 
+    rhfSetValue("sizeRange", cleanSizeRange(cfg.sizeRange), { shouldValidate: true });
     setFormData((prev) => ({
       ...prev,
       propertyType: cfg.propertyType,
-      sizeRange: cfg.sizeRange,
+      sizeRange: cleanSizeRange(cfg.sizeRange),
       scopeItems: (cfg.scopeItems || []).map((s) => ({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
@@ -632,10 +653,11 @@ const QuoteModal = ({
       flatEx.push(...(categoryExclusions[cat] || []));
     });
 
+    rhfSetValue("sizeRange", cleanSizeRange(cfg.sizeRange), { shouldValidate: true });
     setFormData((prev) => ({
       ...prev,
       propertyType: cfg.propertyType,
-      sizeRange: cfg.sizeRange,
+      sizeRange: cleanSizeRange(cfg.sizeRange),
       scopeItems: (cfg.scopeItems || []).map((s) => ({
         ...s,
         materials: s.materials ? s.materials.map((m) => ({ ...m })) : [],
@@ -842,7 +864,7 @@ const QuoteModal = ({
     recipientEmail: formData.recipientEmail,
     recipientPhone: formData.recipientPhone,
     propertyType: formData.propertyType,
-    sizeRange: formData.sizeRange,
+    sizeRange: cleanSizeRange(watchedSizeRange || ""),
     validityDays: Number(formData.validityDays) || 30,
     scopeItems: formData.scopeItems,
     inclusions: formData.inclusions,
@@ -931,6 +953,7 @@ const QuoteModal = ({
     // Sync validated recipient data back to formData
     formData.recipientName = validatedData.recipientName;
     formData.recipientEmail = validatedData.recipientEmail;
+    formData.sizeRange = cleanSizeRange(validatedData.sizeRange);
 
     setIsSending(true);
     await new Promise((r) => setTimeout(r, 600));
@@ -1051,10 +1074,11 @@ const QuoteModal = ({
                     {formData.propertyType ? ` / ${formData.propertyType}` : ""}
                   </p>
                   <p className="text-[11px] text-text-muted mt-0.5">
-                    {formData.sizeRange ||
-                      getConfigForType(presetKey, formData.propertyType)
-                        ?.sizeRange ||
-                      ""}
+                    {formatSizeRange(
+                      formData.sizeRange ||
+                        getConfigForType(presetKey, formData.propertyType)
+                          ?.sizeRange
+                    )}
                   </p>
                 </div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-text-subtle">
@@ -1159,9 +1183,10 @@ const QuoteModal = ({
                     name="sizeRange"
                     label="Size"
                     type="text"
-                    value={formData.sizeRange}
-                    onChange={(e) => updateField("sizeRange", e.target.value)}
-                    placeholder="e.g. 800–1100 sq ft"
+                    register={register("sizeRange")}
+                    error={errors.sizeRange?.message}
+                    suffix="Sq Ft"
+                    placeholder="e.g. 800-1100"
                   />
                 </div>
                 <div className="mt-3">

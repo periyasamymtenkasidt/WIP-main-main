@@ -1,5 +1,6 @@
 import { Fragment, useMemo } from "react";
 import { formatAmount } from "../utils/formatAmount";
+import { formatSizeRange } from "../utils/sizeRangeValidation";
 import { GST_RATE, computeTotals } from "../data/QuotePresets";
 import { assignCategoryNames } from "../utils/scopeNaming";
 import { getGlobalTerms } from "../data/termsStorage";
@@ -133,7 +134,7 @@ const QuotePreview = ({ quote }) => {
             Size :
           </span>
           <span className="font-medium text-black">
-            {quote.sizeRange || "—"}
+            {formatSizeRange(quote.sizeRange)}
           </span>
         </div>
       </div>

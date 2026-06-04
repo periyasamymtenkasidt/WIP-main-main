@@ -50,6 +50,7 @@ import {
   getPresetTotalDays,
 } from "../../data/QuotePresets";
 import { addWorkingDaysISO } from "../../data/scheduleStorage";
+import { formatSizeRange } from "../../utils/sizeRangeValidation";
 
 const DEFAULT_PRESET = "";
 
@@ -380,8 +381,7 @@ function NewInquiriesform({ onClose, onAddLead }) {
                     Size Range
                   </span>
                   <strong className="text-text">
-                    {`${getConfigForType(quotePreset, propertyType)?.sizeRange ||
-                      "—"} sq ft`}
+                    {formatSizeRange(getConfigForType(quotePreset, propertyType)?.sizeRange)}
                   </strong>
                 </span>
                 {presetTotals && (

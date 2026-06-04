@@ -12,6 +12,7 @@ const InputField = ({
   icon: Icon,
   leftIcon: LeftIcon,
   rightElement,
+  suffix,
   className = "",
   rows = 3,
   register,
@@ -59,14 +60,20 @@ const InputField = ({
     return hasError ? s.errorInput : "";
   };
 
-  // Padding adjustments for icons
+  // Padding adjustments for icons and suffixes
   const getInputPadding = () => {
+    let padding = "";
     if (variant === "auth") {
       const left = LeftIcon ? "pl-11" : "";
       const right = rightElement || Icon ? "pr-12" : "";
-      return `${left} ${right}`;
+      padding = `${left} ${right}`;
+    } else {
+      padding = Icon ? "pr-8" : "";
     }
-    return Icon ? "pr-8" : "";
+    if (suffix) {
+      padding += " pr-14";
+    }
+    return padding;
   };
 
   return (
@@ -126,6 +133,13 @@ const InputField = ({
           type !== "textarea" &&
           type !== "select" &&
           Icon && <Icon className={s.iconRight} size={14} />}
+
+        {/* Suffix unit */}
+        {suffix && (
+          <span className="absolute right-3 text-[10px] font-bold text-gray-400 pointer-events-none uppercase">
+            {suffix}
+          </span>
+        )}
 
         {/* Right element (auth variant) — e.g. password toggle button */}
         {variant === "auth" && rightElement && (
