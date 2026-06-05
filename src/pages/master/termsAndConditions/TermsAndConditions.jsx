@@ -12,6 +12,7 @@ import {
   Star,
   Edit2,
 } from "lucide-react";
+import { RiListCheck3 } from "react-icons/ri";
 import {
   getGlobalTerms,
   saveGlobalTerms,
@@ -431,11 +432,18 @@ const TermsAndConditions = () => {
             const isActive = selectedCategory === cat.id;
             const counts = getCategoryCount(cat.id);
             return (
-              <button
+              <div
                 key={cat.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectCategory(cat.id)}
-                className={`flex flex-col items-start text-left p-3.5 rounded-xl border transition-all duration-200 shadow-xs cursor-pointer group ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleSelectCategory(cat.id);
+                  }
+                }}
+                className={`relative flex flex-col items-start text-left p-3.5 rounded-xl border transition-all duration-200 shadow-xs cursor-pointer group select-none min-h-[115px] ${
                   isActive
                     ? "bg-linear-to-br from-select-blue to-primary text-white border-transparent shadow-md shadow-select-blue/10 scale-[1.01]"
                     : "bg-white border-bordergray hover:border-select-blue/30 hover:bg-bg-soft/50 text-textcolor"
@@ -449,57 +457,59 @@ const TermsAndConditions = () => {
                         : "bg-select-blue/5 text-select-blue group-hover:bg-select-blue/10"
                     }`}
                   >
-                    <FileCheck size={15} />
+                    <RiListCheck3 size={15} />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span
-                      className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
-                        isActive
-                          ? "bg-white/20 text-white"
-                          : "bg-bg-soft text-text-muted border border-bordergray"
-                      }`}
-                    >
-                      {counts} {counts === 1 ? "item" : "items"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenRenameModal(cat.id, cat.label);
-                      }}
-                      className={`p-1 rounded-md transition-colors ${
-                        isActive
-                          ? "text-white/80 hover:text-white hover:bg-white/10"
-                          : "text-text-subtle hover:text-select-blue hover:bg-select-blue/5"
-                      }`}
-                      title="Rename category"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenDeleteConfirm(cat.id, cat.label);
-                      }}
-                      className={`p-1 rounded-md transition-colors ${
-                        isActive
-                          ? "text-white/80 hover:text-white hover:bg-white/10"
-                          : "text-text-subtle hover:text-red-500 hover:bg-red-50"
-                      }`}
-                      title="Delete category"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                  <span
+                    className={`text-[9.5px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-bg-soft text-text-muted border border-bordergray"
+                    }`}
+                  >
+                    {counts} {counts === 1 ? "item" : "items"}
+                  </span>
                 </div>
                 <h3 className={`text-[12.5px] font-bold mt-3 leading-tight transition-colors ${isActive ? "text-white" : "text-textcolor"}`}>
                   {cat.label}
                 </h3>
-                <p className={`text-[10px] mt-1 transition-colors leading-normal ${isActive ? "text-white/80" : "text-text-muted"}`}>
+                <p className={`text-[10px] mt-1 transition-colors leading-normal pb-6 pr-8 ${isActive ? "text-white/80" : "text-text-muted"}`}>
                   {cat.desc || "Custom Terms & Conditions category"}
                 </p>
-              </button>
+
+                {/* Edit and Delete action buttons at bottom-right, hidden by default, visible on hover */}
+                <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenRenameModal(cat.id, cat.label);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${
+                      isActive
+                        ? "text-white/80 hover:text-white hover:bg-white/10"
+                        : "text-text-subtle hover:text-select-blue hover:bg-select-blue/5"
+                    }`}
+                    title="Rename category"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenDeleteConfirm(cat.id, cat.label);
+                    }}
+                    className={`p-1 rounded-md transition-colors ${
+                      isActive
+                        ? "text-white/80 hover:text-white hover:bg-white/10"
+                        : "text-text-subtle hover:text-red-500 hover:bg-red-50"
+                    }`}
+                    title="Delete category"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>
@@ -596,7 +606,7 @@ const TermsAndConditions = () => {
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-linear-to-br from-select-blue to-primary text-white text-[11.5px] font-bold hover:shadow-md"
                 >
-                  Save
+                  Save Category
                 </button>
               </div>
             </form>

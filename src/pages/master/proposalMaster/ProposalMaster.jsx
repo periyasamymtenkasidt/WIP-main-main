@@ -48,12 +48,24 @@ import {
   DEFAULT_PRESETS,
 } from "../../../data/QuotePresets";
 import { formatAmount } from "../../../utils/formatAmount";
-import { validateSizeRangeInput, formatSizeRange } from "../../../utils/sizeRangeValidation";
-import { assignCategoryNames, addScopeItemsWithDuplicateCheck, getCategoryKey, getHeadingCategoryKey } from "../../../utils/scopeNaming";
+import {
+  validateSizeRangeInput,
+  formatSizeRange,
+} from "../../../utils/sizeRangeValidation";
+import {
+  assignCategoryNames,
+  addScopeItemsWithDuplicateCheck,
+} from "../../../utils/scopeNaming";
 import ItemFormModal from "../../../components/ItemFormModal";
 import DestinationPromptModal from "../../../components/DestinationPromptModal";
 import Modal from "../../../components/Modal";
-import { getRoomDefaultDays, getScheduleConfig } from "../../../data/scheduleConfig";
+import {
+  getRoomDefaultDays,
+  getScheduleConfig,
+  getScheduleHeadings,
+  getCategoryFromHeading,
+  addScheduleHeading,
+} from "../../../data/scheduleConfig";
 import { computeLibraryItemAmount } from "../../../data/itemLibrary";
 import { PROPERTY_TYPES } from "../../../helperConfigData/helperData";
 import {
@@ -240,7 +252,11 @@ const ProposalMaster = () => {
   const [hiddenConfigs, setHiddenConfigs] = useState({});
   // Accordion state for scope category groups in Scope of Work section.
   const [expandedGroups, setExpandedGroups] = useState({});
-  const toggleGroup = (room) => setExpandedGroups((p) => ({ ...p, [room]: p[room] === false ? true : (p[room] === true ? false : false) }));
+  const toggleGroup = (room) =>
+    setExpandedGroups((p) => ({
+      ...p,
+      [room]: p[room] === false ? true : p[room] === true ? false : false,
+    }));
   const isGroupOpen = (room) => expandedGroups[room] !== false; // default open
 
   // Destination prompt state for quick-add scope chips
@@ -360,12 +376,16 @@ const ProposalMaster = () => {
           if (i === idx) return false;
           return (
             (s.area || s.heading || "").trim().toUpperCase() === newHeading &&
-            (s.itemName || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()
+            (s.itemName || "").trim().toLowerCase() ===
+              (item.itemName || "").trim().toLowerCase()
           );
         });
 
         if (duplicateExists) {
-          showToast(`"${item.itemName}" already exists under heading "${newHeading}".`, "error");
+          showToast(
+            `"${item.itemName}" already exists under heading "${newHeading}".`,
+            "error",
+          );
           return cfg; // Do not update
         }
       }
@@ -389,7 +409,8 @@ const ProposalMaster = () => {
 
   // Quick-add chips from the firm-wide Master → Schedule categories.
   const quickAreas = useMemo(
-    () => getScheduleConfig().rooms.map((r) => ({ name: r.name, days: r.days })),
+    () =>
+      getScheduleConfig().rooms.map((r) => ({ name: r.name, days: r.days })),
     [],
   );
 
@@ -407,26 +428,51 @@ const ProposalMaster = () => {
 
     const currentScopeItems = activeConfig?.scopeItems || [];
     const areaName = preset.name;
-    const catKey = getCategoryKey(areaName);
+    const rootCategory = getCategoryFromHeading(areaName);
 
-    // Collect all unique headings of the same category
+    // Get headings from Schedule Master filtered by category
+    const scheduleHeadingNames = getScheduleHeadings(rootCategory).map((h) =>
+      h.name.trim().toUpperCase(),
+    );
+
+    // Collect existing headings from scope items that match the same category
+    const scopeHeadings = Array.from(
+      new Set(
+        currentScopeItems.map((s) =>
+          (s.area || s.heading || "Unassigned").trim().toUpperCase(),
+        ),
+      ),
+    ).filter((h) => {
+      const hCat = getCategoryFromHeading(h).toUpperCase();
+      return hCat === rootCategory.toUpperCase();
+    });
+
+    // Combine and deduplicate
     const existingHeadings = Array.from(
-      new Set(currentScopeItems.map((s) => (s.area || s.heading || "Unassigned").trim().toUpperCase()))
-    ).filter((h) => getHeadingCategoryKey(h, currentScopeItems) === catKey);
+      new Set([...scheduleHeadingNames, ...scopeHeadings]),
+    );
 
     // Headings that already contain this exact area name as a scope item
     const headingsWithItem = currentScopeItems
-      .filter((s) => (s.itemName || s.description || "").trim().toUpperCase() === areaName.trim().toUpperCase())
+      .filter(
+        (s) =>
+          (s.itemName || s.description || "").trim().toUpperCase() ===
+          areaName.trim().toUpperCase(),
+      )
       .map((s) => (s.area || s.heading || "Unassigned").trim().toUpperCase());
 
-    // F. Single Heading Exception — 0 or 1 headings of matching category: add directly
+    // Single Heading Exception — 0 or 1 headings of matching category: add directly
     if (existingHeadings.length <= 1) {
-      const targetArea = existingHeadings.length === 1 ? existingHeadings[0] : areaName;
+      const targetArea =
+        existingHeadings.length === 1 ? existingHeadings[0] : areaName;
       const newRow = {
         area: targetArea,
         description: "",
         amount: 0,
-        days: preset.days != null && preset.days !== "" ? preset.days : getRoomDefaultDays(areaName),
+        days:
+          preset.days != null && preset.days !== ""
+            ? preset.days
+            : getRoomDefaultDays(areaName),
         materials: [],
       };
       setConfigField((cfg) => ({
@@ -438,11 +484,11 @@ const ProposalMaster = () => {
       return;
     }
 
-    // Multiple headings — show destination prompt
+    // Multiple headings — show destination prompt with category-filtered headings
     setDestPrompt({
       isOpen: true,
       itemName: areaName,
-      itemCategory: areaName,
+      itemCategory: rootCategory,
       existingHeadings,
       headingsWithItem,
       pendingPreset: preset,
@@ -456,7 +502,10 @@ const ProposalMaster = () => {
       area: heading,
       description: "",
       amount: 0,
-      days: preset?.days != null && preset?.days !== "" ? preset.days : getRoomDefaultDays(areaName),
+      days:
+        preset?.days != null && preset?.days !== ""
+          ? preset.days
+          : getRoomDefaultDays(areaName),
       materials: [],
     };
     setConfigField((cfg) => ({
@@ -471,11 +520,19 @@ const ProposalMaster = () => {
   const handleDestPromptCreateNew = (newHeading) => {
     const preset = destPrompt.pendingPreset;
     const areaName = preset?.name || newHeading;
+    // Persist new heading to Schedule Master
+    addScheduleHeading(
+      newHeading,
+      destPrompt.itemCategory || getCategoryFromHeading(newHeading),
+    );
     const newRow = {
       area: newHeading,
       description: "",
       amount: 0,
-      days: preset?.days != null && preset?.days !== "" ? preset.days : getRoomDefaultDays(areaName),
+      days:
+        preset?.days != null && preset?.days !== ""
+          ? preset.days
+          : getRoomDefaultDays(areaName),
       materials: [],
     };
     setConfigField((cfg) => ({
@@ -483,7 +540,10 @@ const ProposalMaster = () => {
       scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
     }));
     setExpanded((p) => ({ ...p, [0]: false }));
-    showToast(`Added "${areaName}" under new heading "${newHeading}"`, "success");
+    showToast(
+      `Added "${areaName}" under new heading "${newHeading}"`,
+      "success",
+    );
     setDestPrompt((p) => ({ ...p, isOpen: false }));
   };
 
@@ -507,7 +567,10 @@ const ProposalMaster = () => {
         const heading = form.heading || form.description || "";
         const itemName = form.itemName || form.description || "";
         if (checkDuplicate(heading, itemName)) {
-          showToast(`"${itemName}" already exists under heading "${heading.toUpperCase()}".`, "error");
+          showToast(
+            `"${itemName}" already exists under heading "${heading.toUpperCase()}".`,
+            "error",
+          );
           return;
         }
       }
@@ -515,7 +578,9 @@ const ProposalMaster = () => {
       const newRows = formOrArray.map((form) => {
         const computed = computeLibraryItemAmount(form);
         const amount = computed || Number(form.rate) || 0;
-        const materials = form.materials ? form.materials.map((m) => ({ ...m })) : [];
+        const materials = form.materials
+          ? form.materials.map((m) => ({ ...m }))
+          : [];
         const heading = form.heading || form.description || "";
         const itemName = form.itemName || form.description || "";
         const description = form.spec || form.description || "";
@@ -551,7 +616,9 @@ const ProposalMaster = () => {
       const form = formOrArray;
       const computed = computeLibraryItemAmount(form);
       const amount = computed || Number(form.rate) || 0;
-      const materials = form.materials ? form.materials.map((m) => ({ ...m })) : [];
+      const materials = form.materials
+        ? form.materials.map((m) => ({ ...m }))
+        : [];
       const heading = form.heading || form.description || "";
       const itemName = form.itemName || form.description || "";
       const description = form.spec || form.description || "";
@@ -562,7 +629,10 @@ const ProposalMaster = () => {
           : getRoomDefaultDays(area);
 
       if (checkDuplicate(heading, itemName, editingScopeIdx)) {
-        showToast(`"${itemName}" already exists under heading "${heading.toUpperCase()}".`, "error");
+        showToast(
+          `"${itemName}" already exists under heading "${heading.toUpperCase()}".`,
+          "error",
+        );
         return;
       }
 
@@ -1345,10 +1415,7 @@ const ProposalMaster = () => {
                               const next = { ...prev };
                               for (const key of Object.keys(next)) {
                                 if (
-                                  key
-                                    .split("::")
-                                    [1]?.trim()
-                                    .toLowerCase() ===
+                                  key.split("::")[1]?.trim().toLowerCase() ===
                                   typeName.trim().toLowerCase()
                                 ) {
                                   delete next[key];
@@ -1357,10 +1424,7 @@ const ProposalMaster = () => {
                               return next;
                             });
                             setActiveConfigIdx(0);
-                            showToast(
-                              `"${typeName}" deleted globally`,
-                              "info",
-                            );
+                            showToast(`"${typeName}" deleted globally`, "info");
                           },
                         });
                       }}
@@ -1405,7 +1469,6 @@ const ProposalMaster = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-
                   <button
                     type="button"
                     onClick={() => setPreviewOpen(true)}
@@ -1466,8 +1529,20 @@ const ProposalMaster = () => {
                         className="w-full flex items-center justify-between mb-2 px-2 py-1.5 rounded-lg hover:bg-bg-soft/60 transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          {groupOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
-                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${gc.dot}`} />
+                          {groupOpen ? (
+                            <ChevronDown
+                              size={13}
+                              className="text-text-muted shrink-0"
+                            />
+                          ) : (
+                            <ChevronRight
+                              size={13}
+                              className="text-text-muted shrink-0"
+                            />
+                          )}
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full shrink-0 ${gc.dot}`}
+                          />
                           <h4 className="text-[12px] font-bold text-textcolor uppercase tracking-wide truncate">
                             {group.room}
                           </h4>
@@ -1480,195 +1555,206 @@ const ProposalMaster = () => {
                         </span>
                       </button>
                       {groupOpen && (
-                      <div className="space-y-3">
-                {group.rows.map(({ item, idx }) => {
-                  const isOpen = !!expanded[idx];
-                  const matCount = (item.materials || []).length;
-                  const cat = getCategory(item.area);
-                  const c = COLOR_MAP[cat.color];
-                  const Icon = cat.icon;
-                  const amount = Number(item.amount) || 0;
-                  const pct =
-                    totals.subtotal > 0
-                      ? Math.round((amount / totals.subtotal) * 100)
-                      : 0;
-                  const barWidth = maxScope > 0 ? (amount / maxScope) * 100 : 0;
-                  return (
-                    <div
-                      key={idx}
-                      className="rounded-xl border border-bordergray bg-white hover:border-select-blue/40 hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-all group"
-                    >
-                      <div className="p-3 grid grid-cols-[20px_28px_1fr_1.4fr_92px_140px_28px] gap-2 items-center">
-                        <button
-                          type="button"
-                          className="h-6 w-5 flex items-center justify-center text-text-subtle opacity-0 group-hover:opacity-100 cursor-grab"
-                          title="Drag to reorder (coming soon)"
-                        >
-                          <GripVertical size={12} />
-                        </button>
-                        <span
-                          className={`h-7 w-7 flex items-center justify-center rounded-lg ${c.bg} ${c.text}`}
-                        >
-                          <Icon size={13} />
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => openEditScope(idx)}
-                          title="Click to edit this scope"
-                          className="text-[12px] font-semibold text-textcolor px-1 py-2 truncate text-left hover:text-select-blue hover:underline"
-                        >
-                          {namedOriginalItems[idx]?._displayCategory || item.area || (
-                            <span className="text-text-subtle font-normal italic no-underline">
-                              No room
-                            </span>
-                          )}
-                        </button>
-                        <input
-                          type="text"
-                          value={item.description || ""}
-                          onChange={(e) =>
-                            updateScope(idx, "description", e.target.value)
-                          }
-                          placeholder="Description"
-                          className={inputBase}
-                        />
-                        <div
-                          className="relative"
-                          title="Default duration in days — seeds the project schedule"
-                        >
-                          <input
-                            type="number"
-                            min={0}
-                            value={item.days ?? ""}
-                            onChange={(e) =>
-                              updateScope(idx, "days", e.target.value)
-                            }
-                            placeholder="Days"
-                            className={`${inputBase} pr-8 text-center tabular-nums`}
-                          />
-                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-text-subtle pointer-events-none">
-                            d
-                          </span>
-                        </div>
-                        <AmountInput
-                          value={item.amount}
-                          onChange={(v) => updateScope(idx, "amount", v)}
-                          pct={pct}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeScopeRow(idx)}
-                          className="h-7 w-7 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                          title="Remove row"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-
-                      <div className="px-3 pb-2">
-                        <div className="h-1 w-full bg-bg-soft rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${c.bar} transition-all`}
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="border-t border-bordergray bg-bg-soft/40">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(idx)}
-                          className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold text-text-muted hover:text-select-blue"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            {isOpen ? (
-                              <ChevronDown size={12} />
-                            ) : (
-                              <ChevronRight size={12} />
-                            )}
-                            Materials & Specifications
-                            {matCount > 0 && (
-                              <span className="ml-1 text-[10px] font-bold text-select-blue bg-white px-1.5 py-0.5 rounded-md border border-bordergray">
-                                {matCount}
-                              </span>
-                            )}
-                          </span>
-                          {!isOpen && matCount > 0 && (
-                            <span className="text-[10px] text-text-subtle truncate max-w-[60%]">
-                              {item.materials
-                                .map((m) => m.name)
-                                .filter(Boolean)
-                                .join(", ")}
-                            </span>
-                          )}
-                          {isOpen && (
-                            <span className="text-[10px] text-text-subtle">
-                              Hide
-                            </span>
-                          )}
-                        </button>
-
-                        {isOpen && (
-                          <div className="px-4 pb-3 space-y-1.5">
-                            {(item.materials || []).map((m, mIdx) => (
+                        <div className="space-y-3">
+                          {group.rows.map(({ item, idx }) => {
+                            const isOpen = !!expanded[idx];
+                            const matCount = (item.materials || []).length;
+                            const cat = getCategory(item.area);
+                            const c = COLOR_MAP[cat.color];
+                            const Icon = cat.icon;
+                            const amount = Number(item.amount) || 0;
+                            const pct =
+                              totals.subtotal > 0
+                                ? Math.round((amount / totals.subtotal) * 100)
+                                : 0;
+                            const barWidth =
+                              maxScope > 0 ? (amount / maxScope) * 100 : 0;
+                            return (
                               <div
-                                key={mIdx}
-                                className="grid grid-cols-[130px_1fr_24px] gap-2 items-center"
+                                key={idx}
+                                className="rounded-xl border border-bordergray bg-white hover:border-select-blue/40 hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-all group"
                               >
-                                <input
-                                  type="text"
-                                  value={m.name}
-                                  onChange={(e) =>
-                                    updateMaterial(
-                                      idx,
-                                      mIdx,
-                                      "name",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Plywood"
-                                  className={`${inputBase} py-1.5 text-[11px]`}
-                                />
-                                <input
-                                  type="text"
-                                  value={m.spec}
-                                  onChange={(e) =>
-                                    updateMaterial(
-                                      idx,
-                                      mIdx,
-                                      "spec",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="BWP 19mm"
-                                  className={`${inputBase} py-1.5 text-[11px]`}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeMaterial(idx, mIdx)}
-                                  className="h-7 w-6 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50"
-                                  title="Remove material"
-                                >
-                                  <Trash2 size={11} />
-                                </button>
+                                <div className="p-3 grid grid-cols-[20px_28px_1fr_1.4fr_92px_140px_28px] gap-2 items-center">
+                                  <button
+                                    type="button"
+                                    className="h-6 w-5 flex items-center justify-center text-text-subtle opacity-0 group-hover:opacity-100 cursor-grab"
+                                    title="Drag to reorder (coming soon)"
+                                  >
+                                    <GripVertical size={12} />
+                                  </button>
+                                  <span
+                                    className={`h-7 w-7 flex items-center justify-center rounded-lg ${c.bg} ${c.text}`}
+                                  >
+                                    <Icon size={13} />
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditScope(idx)}
+                                    title="Click to edit this scope"
+                                    className="text-[12px] font-semibold text-textcolor px-1 py-2 truncate text-left hover:text-select-blue hover:underline"
+                                  >
+                                    {namedOriginalItems[idx]
+                                      ?._displayCategory ||
+                                      item.area || (
+                                        <span className="text-text-subtle font-normal italic no-underline">
+                                          No room
+                                        </span>
+                                      )}
+                                  </button>
+                                  <input
+                                    type="text"
+                                    value={item.description || ""}
+                                    onChange={(e) =>
+                                      updateScope(
+                                        idx,
+                                        "description",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Description"
+                                    className={inputBase}
+                                  />
+                                  <div
+                                    className="relative"
+                                    title="Default duration in days — seeds the project schedule"
+                                  >
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={item.days ?? ""}
+                                      onChange={(e) =>
+                                        updateScope(idx, "days", e.target.value)
+                                      }
+                                      placeholder="Days"
+                                      className={`${inputBase} pr-8 text-center tabular-nums`}
+                                    />
+                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-text-subtle pointer-events-none">
+                                      d
+                                    </span>
+                                  </div>
+                                  <AmountInput
+                                    value={item.amount}
+                                    onChange={(v) =>
+                                      updateScope(idx, "amount", v)
+                                    }
+                                    pct={pct}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeScopeRow(idx)}
+                                    className="h-7 w-7 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Remove row"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+
+                                <div className="px-3 pb-2">
+                                  <div className="h-1 w-full bg-bg-soft rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full ${c.bar} transition-all`}
+                                      style={{ width: `${barWidth}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="border-t border-bordergray bg-bg-soft/40">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpanded(idx)}
+                                    className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold text-text-muted hover:text-select-blue"
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      {isOpen ? (
+                                        <ChevronDown size={12} />
+                                      ) : (
+                                        <ChevronRight size={12} />
+                                      )}
+                                      Materials & Specifications
+                                      {matCount > 0 && (
+                                        <span className="ml-1 text-[10px] font-bold text-select-blue bg-white px-1.5 py-0.5 rounded-md border border-bordergray">
+                                          {matCount}
+                                        </span>
+                                      )}
+                                    </span>
+                                    {!isOpen && matCount > 0 && (
+                                      <span className="text-[10px] text-text-subtle truncate max-w-[60%]">
+                                        {item.materials
+                                          .map((m) => m.name)
+                                          .filter(Boolean)
+                                          .join(", ")}
+                                      </span>
+                                    )}
+                                    {isOpen && (
+                                      <span className="text-[10px] text-text-subtle">
+                                        Hide
+                                      </span>
+                                    )}
+                                  </button>
+
+                                  {isOpen && (
+                                    <div className="px-4 pb-3 space-y-1.5">
+                                      {(item.materials || []).map((m, mIdx) => (
+                                        <div
+                                          key={mIdx}
+                                          className="grid grid-cols-[130px_1fr_24px] gap-2 items-center"
+                                        >
+                                          <input
+                                            type="text"
+                                            value={m.name}
+                                            onChange={(e) =>
+                                              updateMaterial(
+                                                idx,
+                                                mIdx,
+                                                "name",
+                                                e.target.value,
+                                              )
+                                            }
+                                            placeholder="Plywood"
+                                            className={`${inputBase} py-1.5 text-[11px]`}
+                                          />
+                                          <input
+                                            type="text"
+                                            value={m.spec}
+                                            onChange={(e) =>
+                                              updateMaterial(
+                                                idx,
+                                                mIdx,
+                                                "spec",
+                                                e.target.value,
+                                              )
+                                            }
+                                            placeholder="BWP 19mm"
+                                            className={`${inputBase} py-1.5 text-[11px]`}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              removeMaterial(idx, mIdx)
+                                            }
+                                            className="h-7 w-6 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50"
+                                            title="Remove material"
+                                          >
+                                            <Trash2 size={11} />
+                                          </button>
+                                        </div>
+                                      ))}
+                                      <div className="flex items-center gap-3 mt-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => addMaterial(idx)}
+                                          className="flex items-center gap-1 text-[11px] font-semibold text-select-blue hover:text-primary"
+                                        >
+                                          <Plus size={11} /> Add Material
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            ))}
-                            <div className="flex items-center gap-3 mt-1.5">
-                              <button
-                                type="button"
-                                onClick={() => addMaterial(idx)}
-                                className="flex items-center gap-1 text-[11px] font-semibold text-select-blue hover:text-primary"
-                              >
-                                <Plus size={11} /> Add Material
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                      </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   );
@@ -2028,7 +2114,10 @@ const ProposalMaster = () => {
                   </div>
                   <div className="space-y-3">
                     {group.rows.map(({ item, idx }) => (
-                      <div key={idx} className="flex items-start justify-between gap-4">
+                      <div
+                        key={idx}
+                        className="flex items-start justify-between gap-4"
+                      >
                         <div className="min-w-0">
                           {item.description && (
                             <p className="text-[12.5px] text-textcolor">
@@ -2038,14 +2127,18 @@ const ProposalMaster = () => {
                           {(item.materials || []).length > 0 && (
                             <p className="text-[11px] text-text-muted mt-0.5">
                               {item.materials
-                                .map((m) => `${m.name}${m.spec ? ` (${m.spec})` : ""}`)
+                                .map(
+                                  (m) =>
+                                    `${m.name}${m.spec ? ` (${m.spec})` : ""}`,
+                                )
                                 .filter(Boolean)
                                 .join(" · ")}
                             </p>
                           )}
                           {item.days !== "" && item.days != null && (
                             <p className="text-[10.5px] text-text-subtle mt-0.5">
-                              {item.days} working day{Number(item.days) === 1 ? "" : "s"}
+                              {item.days} working day
+                              {Number(item.days) === 1 ? "" : "s"}
                             </p>
                           )}
                         </div>
@@ -2087,7 +2180,9 @@ const AddTypeModal = ({
   // Local copy of global types list (may grow during the modal session).
   const [allTypes, setAllTypes] = useState(() => getGlobalPropertyTypes());
   // Which types are currently checked in the modal (local draft state).
-  const [draftChecked, setDraftChecked] = useState(() => new Set(initialChecked));
+  const [draftChecked, setDraftChecked] = useState(
+    () => new Set(initialChecked),
+  );
   // Newly created types during this modal session.
   const [newlyCreated, setNewlyCreated] = useState([]);
   // Inline textbox value for adding a new type.
@@ -2203,7 +2298,9 @@ const AddTypeModal = ({
       {/* Inline textbox to add new property type */}
       <div className="mb-4">
         <label className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
-          <span className="text-select-blue"><Plus size={10} /></span>
+          <span className="text-select-blue">
+            <Plus size={10} />
+          </span>
           Add New Property Type
         </label>
         <div className="flex items-center gap-2">
@@ -2301,10 +2398,7 @@ const AddTypeModal = ({
               </div>
               {/* Right icon indicating state */}
               {isChecked && (
-                <CheckCircle2
-                  size={14}
-                  className="shrink-0 text-select-blue"
-                />
+                <CheckCircle2 size={14} className="shrink-0 text-select-blue" />
               )}
             </label>
           );

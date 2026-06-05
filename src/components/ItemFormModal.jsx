@@ -16,16 +16,23 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import InputField from "./InputField";
 import CategorySelect from "./CategorySelect";
-import { getScheduleConfig, getRoomDefaultDays } from "../data/scheduleConfig";
+import {
+  getScheduleConfig,
+  getRoomDefaultDays,
+  getScheduleHeadings,
+  getCategoryFromHeading,
+  addScheduleHeading,
+} from "../data/scheduleConfig";
 import { roomColor } from "../data/categoryColors";
 import {
   assignCategoryNames,
   getDetailedDescription,
-  getCategoryKey,
   getCategoryFromItemName,
-  getHeadingCategoryKey,
 } from "../utils/scopeNaming";
 import DestinationPromptModal from "./DestinationPromptModal";
+import EditableHeadingDropdown from "./EditableHeadingDropdown";
+import FilteredItemNameDropdown from "./FilteredItemNameDropdown";
+import DuplicateScopeWarningModal from "./DuplicateScopeWarningModal";
 
 const itemFormSchema = yup.object().shape({
   heading: yup.string().trim(),
@@ -159,6 +166,15 @@ const ItemFormModal = ({
     onCancel: null,
   });
 
+  // ── Duplicate scope warning state ────────────────────────────────────────
+  const [duplicateWarning, setDuplicateWarning] = useState({
+    isOpen: false,
+    itemName: "",
+    existingHeading: "",
+    onAdd: null,
+    onSkip: null,
+  });
+
   const getDestinationHeading = (itemName, category) => {
     return new Promise((resolve, reject) => {
       const allItems = [
@@ -167,20 +183,30 @@ const ItemFormModal = ({
       ];
       
       const resolvedCategory = category || getCategoryFromItemName(itemName);
-      const itemCatKey = getCategoryKey(resolvedCategory);
+      // Use Schedule Master heading to get the root category
+      const rootCategory = getCategoryFromHeading(resolvedCategory);
 
-      // Filter existing headings to only keep those belonging to the same category
-      const existingHeadings = Array.from(
+      // Get headings from Schedule Master filtered by category
+      const scheduleHeadingNames = getScheduleHeadings(rootCategory).map((h) => h.name.toUpperCase());
+
+      // Also include headings from existing scope items that match the category
+      const scopeHeadings = Array.from(
         new Set(allItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
-      ).filter(h => getHeadingCategoryKey(h, allItems) === itemCatKey);
+      ).filter(h => {
+        const hCat = getCategoryFromHeading(h).toUpperCase();
+        return hCat === rootCategory.toUpperCase();
+      });
+
+      // Combine and deduplicate
+      const existingHeadings = Array.from(new Set([...scheduleHeadingNames, ...scopeHeadings]));
 
       const headingsWithItem = allItems
         .filter((item) => (item.itemName || item.description || "").trim().toLowerCase() === itemName.trim().toLowerCase())
         .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
 
       // Single Heading Exception - only if there is exactly 1 heading of the matching category
-      if (existingHeadings.length === 1) {
-        const singleHeading = existingHeadings[0];
+      if (existingHeadings.length <= 1) {
+        const singleHeading = existingHeadings.length === 1 ? existingHeadings[0] : rootCategory.toUpperCase();
         if (!headingsWithItem.includes(singleHeading)) {
           resolve(singleHeading);
           return;
@@ -190,7 +216,7 @@ const ItemFormModal = ({
       setDestPrompt({
         isOpen: true,
         itemName,
-        category: resolvedCategory,
+        category: rootCategory,
         existingHeadings,
         headingsWithItem,
         onSelect: (selectedHeading) => {
@@ -199,6 +225,8 @@ const ItemFormModal = ({
         },
         onCreateNew: (newHeading) => {
           setDestPrompt((prev) => ({ ...prev, isOpen: false }));
+          // Persist new heading to Schedule Master
+          addScheduleHeading(newHeading, rootCategory);
           resolve(newHeading);
         },
         onCancel: () => {
@@ -224,6 +252,7 @@ const ItemFormModal = ({
     update({ materials: form.materials.filter((_, i) => i !== idx) });
 
   const watchedItemName = watch("itemName");
+  const watchedHeading = watch("heading");
   const [prevItemName, setPrevItemName] = useState(defaults.itemName || "");
   useEffect(() => {
     if (roomCategoryMode && watchedItemName && watchedItemName !== prevItemName) {
@@ -234,6 +263,37 @@ const ItemFormModal = ({
       setPrevItemName(watchedItemName);
     }
   }, [watchedItemName, roomCategoryMode, rhfSetValue, prevItemName]);
+
+  // Resolve the category from the current heading for filtering dropdowns
+  const resolvedHeadingCategory = useMemo(() => {
+    if (!watchedHeading) return "";
+    return getCategoryFromHeading(watchedHeading);
+  }, [watchedHeading]);
+
+  // Auto-populate fields when an item is selected from the FilteredItemNameDropdown
+  const handleItemNameSelect = (libraryItem) => {
+    const itemName = libraryItem.description || "";
+    const spec = libraryItem.spec || getDetailedDescription(itemName) || itemName;
+    rhfSetValue("itemName", itemName, { shouldValidate: true });
+    rhfSetValue("spec", spec, { shouldValidate: true });
+    rhfSetValue("rate", libraryItem.rate || 0, { shouldValidate: true });
+    rhfSetValue("hsn", libraryItem.hsn || "", { shouldValidate: true });
+    rhfSetValue("length", libraryItem.length || 0, { shouldValidate: true });
+    rhfSetValue("breadth", libraryItem.breadth || 0, { shouldValidate: true });
+    rhfSetValue("height", libraryItem.height || 0, { shouldValidate: true });
+    rhfSetValue("qty", libraryItem.qty || 0, { shouldValidate: true });
+    const days = libraryItem.days !== "" && libraryItem.days != null
+      ? libraryItem.days
+      : getRoomDefaultDays(libraryItem.category || resolvedHeadingCategory);
+    update({
+      unit: libraryItem.unit || "sqft",
+      gstPercent: libraryItem.gstPercent || 18,
+      days,
+      materials: libraryItem.materials ? libraryItem.materials.map((m) => ({ ...m })) : [],
+      masterId: libraryItem.id,
+    });
+    setPrevItemName(itemName);
+  };
 
   // Convert a library item to the unified form state object
   const libraryItemToFormState = (lib) => {
@@ -293,28 +353,82 @@ const ItemFormModal = ({
     setPickerOpen(false);
   };
 
-  // Multi-entry library pick handler
+  // Multi-entry library pick handler — groups items by category and shows
+  // one destination prompt per category (not per individual scope).
   const handleLibraryPick = async (libOrLibs) => {
     try {
       if (Array.isArray(libOrLibs)) {
-        const newDrafts = [];
+        // Group selected items by category
+        const categoryGroups = new Map();
         for (const lib of libOrLibs) {
-          const itemName = lib.description || "";
-          const heading = await getDestinationHeading(itemName, lib.category);
-          const itemFormState = libraryItemToFormState(lib);
-          itemFormState.heading = heading;
-          itemFormState.area = heading;
-          newDrafts.push(itemFormState);
+          const cat = getCategoryFromHeading(lib.category || "") || lib.category || "Uncategorized";
+          if (!categoryGroups.has(cat)) {
+            categoryGroups.set(cat, []);
+          }
+          categoryGroups.get(cat).push(lib);
         }
-        setDrafts((prev) => {
-          const next = [...prev, ...newDrafts];
-          const newFirstIndex = prev.length;
-          setSelectedDraftIndex(newFirstIndex);
-          setTimeout(() => {
-            loadDraftIntoForm(newDrafts[0]);
-          }, 0);
-          return next;
-        });
+
+        const newDrafts = [];
+        const allItems = [...(existingScopeItems || []), ...drafts];
+
+        // Process one category at a time — one destination prompt per category
+        for (const [category, items] of categoryGroups) {
+          // Get the destination heading for this category (shown once)
+          let heading;
+          try {
+            heading = await getDestinationHeading(category, category);
+          } catch {
+            continue; // user cancelled this category, skip all its items
+          }
+
+          // Bulk-assign all non-duplicate items in this category
+          for (const lib of items) {
+            const itemName = lib.description || "";
+            const existingItem = [...allItems, ...newDrafts].find(
+              (s) =>
+                (s.itemName || s.description || "").trim().toLowerCase() === itemName.trim().toLowerCase() &&
+                (s.area || s.heading || "").trim().toUpperCase() === heading.trim().toUpperCase()
+            );
+
+            if (existingItem) {
+              // Duplicate detected — show warning
+              const existingHeading = (existingItem.area || existingItem.heading || "").trim().toUpperCase();
+              const shouldAdd = await new Promise((resolve) => {
+                setDuplicateWarning({
+                  isOpen: true,
+                  itemName,
+                  existingHeading,
+                  onAdd: () => {
+                    setDuplicateWarning((p) => ({ ...p, isOpen: false }));
+                    resolve(true);
+                  },
+                  onSkip: () => {
+                    setDuplicateWarning((p) => ({ ...p, isOpen: false }));
+                    resolve(false);
+                  },
+                });
+              });
+              if (!shouldAdd) continue; // skip this duplicate
+            }
+
+            const itemFormState = libraryItemToFormState(lib);
+            itemFormState.heading = heading;
+            itemFormState.area = heading;
+            newDrafts.push(itemFormState);
+          }
+        }
+
+        if (newDrafts.length > 0) {
+          setDrafts((prev) => {
+            const next = [...prev, ...newDrafts];
+            const newFirstIndex = prev.length;
+            setSelectedDraftIndex(newFirstIndex);
+            setTimeout(() => {
+              loadDraftIntoForm(newDrafts[0]);
+            }, 0);
+            return next;
+          });
+        }
         setPickerOpen(false);
       } else {
         const itemName = libOrLibs.description || "";
@@ -686,20 +800,31 @@ const ItemFormModal = ({
               <>
                 <div>
                   <Label>Heading *</Label>
-                  <InputField
-                    name="heading"
-                    register={register("heading")}
-                    placeholder="e.g. COMMON BATHROOM"
+                  <EditableHeadingDropdown
+                    value={watchedHeading || ""}
+                    category={resolvedHeadingCategory}
+                    onChange={(val) => {
+                      rhfSetValue("heading", val, { shouldValidate: true });
+                    }}
+                    existingScopeItems={[
+                      ...(existingScopeItems || []),
+                      ...drafts,
+                    ]}
                     error={errors.heading?.message}
+                    placeholder="Select or create a heading…"
                   />
                 </div>
                 <div>
                   <Label>Item Name *</Label>
-                  <InputField
-                    name="itemName"
-                    register={register("itemName")}
-                    placeholder="e.g. Vanity, Mirror, Shower Partition"
+                  <FilteredItemNameDropdown
+                    value={watchedItemName || ""}
+                    headingOrCategory={resolvedHeadingCategory || watchedHeading || ""}
+                    onChange={(val) => {
+                      rhfSetValue("itemName", val, { shouldValidate: true });
+                    }}
+                    onItemSelect={handleItemNameSelect}
                     error={errors.itemName?.message}
+                    placeholder="Select or type an item name…"
                   />
                 </div>
                 <div>
@@ -1009,6 +1134,14 @@ const ItemFormModal = ({
         headingsWithItem={destPrompt.headingsWithItem}
         onSelect={destPrompt.onSelect}
         onCreateNew={destPrompt.onCreateNew}
+      />
+
+      <DuplicateScopeWarningModal
+        isOpen={duplicateWarning.isOpen}
+        itemName={duplicateWarning.itemName}
+        existingHeading={duplicateWarning.existingHeading}
+        onAddAnyway={duplicateWarning.onAdd}
+        onSkip={duplicateWarning.onSkip}
       />
     </div>
   );

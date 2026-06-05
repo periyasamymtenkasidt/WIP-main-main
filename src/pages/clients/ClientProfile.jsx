@@ -104,6 +104,16 @@ const ClientProfile = () => {
 
   const handleMarkPaid = (milestoneId) => {
     if (!milestones) return;
+    
+    // Find the index of the milestone to mark as paid
+    const targetIdx = milestones.findIndex((m) => m.id === milestoneId);
+    if (targetIdx === -1) return;
+    
+    // Ensure all previous stages are paid before marking this one as paid
+    if (targetIdx > 0 && milestones[targetIdx - 1].status !== "paid") {
+      return;
+    }
+
     const today = new Date();
     const paidDate = `${String(today.getDate()).padStart(2, "0")}.${String(today.getMonth() + 1).padStart(2, "0")}.${today.getFullYear()}`;
     const updated = milestones.map((m) =>
@@ -711,6 +721,7 @@ const ClientProfile = () => {
                         <div className="flex flex-col gap-3">
                           {milestones.map((m, idx) => {
                             const isPaid = m.status === "paid";
+                            const isPreviousPaid = idx === 0 || milestones[idx - 1].status === "paid";
                             const base = m.base ?? m.amount ?? 0;
                             const gstAmt = m.gstAmt ?? Math.round(base * 0.18);
                             const total = m.total ?? base + gstAmt;
@@ -719,8 +730,10 @@ const ClientProfile = () => {
                                 key={m.id}
                                 className={`flex items-center justify-between p-4 rounded-[16px] border transition-all ${
                                   isPaid
-                                    ? "bg-emerald-50 border-emerald-100"
-                                    : "bg-white border-border hover:border-blue-100 hover:bg-palewhite"
+                                    ? "bg-emerald-50/50 border-emerald-100"
+                                    : !isPreviousPaid
+                                      ? "bg-gray-50/70 border-gray-200/60 opacity-60 cursor-not-allowed select-none"
+                                      : "bg-white border-border hover:border-blue-100 hover:bg-palewhite"
                                 }`}
                               >
                                 <div className="flex items-center gap-4">
@@ -728,7 +741,9 @@ const ClientProfile = () => {
                                     className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-[12px] font-bold border-2 ${
                                       isPaid
                                         ? "bg-emerald-500 border-emerald-500 text-white"
-                                        : "bg-white border-border text-text-muted"
+                                        : !isPreviousPaid
+                                          ? "bg-gray-100/80 border-gray-200 text-gray-400"
+                                          : "bg-white border-border text-text-muted"
                                     }`}
                                   >
                                     {isPaid ? (
@@ -739,7 +754,13 @@ const ClientProfile = () => {
                                   </div>
                                   <div>
                                     <p
-                                      className={`text-[14px] font-bold ${isPaid ? "text-emerald-700" : "text-darkgray"}`}
+                                      className={`text-[14px] font-bold ${
+                                        isPaid
+                                          ? "text-emerald-700"
+                                          : !isPreviousPaid
+                                            ? "text-gray-400"
+                                            : "text-darkgray"
+                                      }`}
                                     >
                                       {m.name}
                                     </p>
@@ -748,7 +769,11 @@ const ClientProfile = () => {
                                         Paid on {m.paidDate}
                                       </p>
                                     ) : (
-                                      <p className="text-[11px] text-text-muted font-medium">
+                                      <p
+                                        className={`text-[11px] font-medium ${
+                                          !isPreviousPaid ? "text-gray-400" : "text-text-muted"
+                                        }`}
+                                      >
                                         {formatAmount(base)} + GST{" "}
                                         {formatAmount(gstAmt)}
                                       </p>
@@ -759,11 +784,21 @@ const ClientProfile = () => {
                                 <div className="flex items-center gap-5">
                                   <div className="text-right">
                                     <p
-                                      className={`text-[15px] font-bold ${isPaid ? "text-emerald-700" : "text-darkgray"}`}
+                                      className={`text-[15px] font-bold ${
+                                        isPaid
+                                          ? "text-emerald-700"
+                                          : !isPreviousPaid
+                                            ? "text-gray-400"
+                                            : "text-darkgray"
+                                      }`}
                                     >
                                       {formatAmount(total)}
                                     </p>
-                                    <p className="text-[11px] text-text-muted">
+                                    <p
+                                      className={`text-[11px] ${
+                                        !isPreviousPaid ? "text-gray-400/80" : "text-text-muted"
+                                      }`}
+                                    >
                                       {m.pct}% + 18% GST
                                     </p>
                                   </div>
@@ -774,8 +809,15 @@ const ClientProfile = () => {
                                   ) : (
                                     <button
                                       onClick={() => handleMarkPaid(m.id)}
-                                      className="px-4 py-2 rounded-xl  text-white text-[12px] font-bold  bg-blue-950 transition-colors shadow-sm"
-                                    >Mark as Paid</button>
+                                      disabled={!isPreviousPaid}
+                                      className={`px-4 py-2 rounded-xl text-[12px] font-bold transition-all shadow-sm ${
+                                        !isPreviousPaid
+                                          ? "bg-gray-200 text-gray-400 border border-gray-200 cursor-not-allowed"
+                                          : "bg-blue-950 hover:bg-blue-900 text-white cursor-pointer"
+                                      }`}
+                                    >
+                                      Mark as Paid
+                                    </button>
                                   )}
                                 </div>
                               </div>
