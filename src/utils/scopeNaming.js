@@ -13,10 +13,6 @@ export const getDetailedDescription = (itemName) => {
     );
     if (matched) {
       if (matched.spec) return matched.spec;
-      if (matched.materials && matched.materials.length > 0) {
-        return matched.materials.map((m) => `${m.name}: ${m.spec}`).join(", ");
-      }
-      return matched.description;
     }
   } catch (e) {
     // fall through
@@ -47,10 +43,18 @@ export const normalizeScopeItem = (item) => {
   }
 
   // 3. description (Detailed Description)
+  // Only populate when actual data exists — don't auto-fill placeholder values
+  // or copy values from other fields (Req 6)
   let description = item.description || "";
-  const syncDesc = getDetailedDescription(itemName);
-  if (syncDesc && !item.isDescriptionCustom) {
-    description = syncDesc;
+  if (!item.isDescriptionCustom) {
+    const syncDesc = getDetailedDescription(itemName);
+    if (syncDesc && syncDesc !== itemName) {
+      description = syncDesc;
+    } else {
+      if (description === itemName) {
+        description = "";
+      }
+    }
   }
 
   return {
@@ -191,7 +195,10 @@ export const refreshScopeItemsFromMaster = (scopeItems, presetKey, propertyType)
       }
 
       // 2. Item Name propagation
-      const itemName = masterItem.itemName || item.itemName;
+      let itemName = item.itemName;
+      if (!item.isItemNameCustom) {
+        itemName = masterItem.itemName || itemName;
+      }
 
       // 3. Detailed Description propagation
       let description = item.description;

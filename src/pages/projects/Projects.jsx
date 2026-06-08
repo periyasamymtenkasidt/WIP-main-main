@@ -154,7 +154,7 @@ const Projects = () => {
     const filtered = allRows.filter((row) => {
       switch (activeSubTab) {
         case 0:
-          return row.phase === "sales" && !row.isLost;
+          return false;
         case 1:
           return (row.phase === "delivery" || (row.phase === "closed" && row.stageLabel === "REMAINING")) && !row.isHandoverComplete && !row.isLost;
         case 2:
@@ -291,7 +291,7 @@ const Projects = () => {
         subtitle={`Projects - ${SUB_TABS[activeSubTab]}`}
         columns={columns}
         data={data}
-        emptyMessage="No projects in this stage. Send a proposal from a lead to get started."
+        emptyMessage="No projects in this stage."
         rowsPerPage={8}
         activeRowKey="proposalId"
         onRowClick={(row) => navigate(`/projects/${row.proposalId}`)}

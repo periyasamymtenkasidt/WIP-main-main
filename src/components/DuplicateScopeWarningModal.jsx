@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, XCircle, X } from "lucide-react";
 
 /**
  * Warning modal shown when a duplicate scope item is detected during
@@ -26,7 +26,7 @@ const DuplicateScopeWarningModal = ({
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 bg-amber-50 border-b border-amber-200">
+        <div className="flex items-center gap-3 px-6 py-4 bg-amber-50 border-b border-amber-200 relative">
           <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
             <AlertTriangle size={18} className="text-amber-600" />
           </div>
@@ -38,6 +38,14 @@ const DuplicateScopeWarningModal = ({
               This item already exists in your scope
             </p>
           </div>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+            title="Close warning"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         {/* Content */}

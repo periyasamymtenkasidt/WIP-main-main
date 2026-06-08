@@ -10,11 +10,11 @@ const MainLayout = () => {
       </header>
 
       <div className="flex-1 w-full flex overflow-hidden">
-        <aside className="shrink-0 h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <aside className="shrink-0 h-full overflow-y-auto scroll-hidden-bar">
           <Sidebar />
         </aside>
 
-        <main className="flex-1 h-full overflow-y-auto">
+        <main className="flex-1 h-full overflow-hidden">
           <Outlet />
         </main>
       </div>

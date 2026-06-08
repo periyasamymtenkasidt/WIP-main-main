@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { HiMiniXMark } from "react-icons/hi2";
+import { X } from "lucide-react";
 
 /**
  * Props:
@@ -10,7 +10,7 @@ import { HiMiniXMark } from "react-icons/hi2";
  *   footer      — ReactNode pinned to the bottom (buttons go here)
  *   maxWidth    — Tailwind max-w class, default "max-w-[660px]"
  */
-const Modal = ({ title, subtitle, onClose, children, footer, maxWidth = "max-w-[660px]", maxHeight = "max-h-[90vh]" }) => {
+const Modal = ({ title, subtitle, onClose, children, footer, maxWidth = "max-w-[660px]", maxHeight = "max-h-[90vh]", bodyScrollable = true }) => {
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "Escape") onClose?.();
@@ -46,14 +46,14 @@ const Modal = ({ title, subtitle, onClose, children, footer, maxWidth = "max-w-[
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-red-600 transition-colors mt-0.5 shrink-0"
+            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors mt-0.5 shrink-0 cursor-pointer"
           >
-            <HiMiniXMark size={22} />
+            <X size={16} />
           </button>
         </div>
 
         {/* Body — scrollable */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6">
+        <div className={`flex-1 min-h-0 px-8 py-6 ${bodyScrollable ? "overflow-y-auto scroll-hidden-bar" : "overflow-hidden"}`}>
           {children}
         </div>
 

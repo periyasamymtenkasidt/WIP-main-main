@@ -216,7 +216,7 @@ const Table = ({
               )}
               {/* Folder tabs — toolbar sits on the right (flex justify-between) */}
               <div className="flex justify-between items-end">
-                <div className="overflow-x-auto min-w-0 [&::-webkit-scrollbar]:hidden">
+                <div className="overflow-x-auto min-w-0 scroll-hidden-bar">
                   <div className="flex gap-7 items-end pl-2 relative z-20">
                     {mainTabs.map((tab, idx) => {
                       const isActive = activeMainTab === idx;
@@ -267,7 +267,7 @@ const Table = ({
             <div
               className={`flex ${!mainTabs?.length ? "justify-between items-start gap-2" : ""}`}
             >
-              <div className="overflow-x-auto min-w-0 [&::-webkit-scrollbar]:hidden">
+              <div className="overflow-x-auto min-w-0 scroll-hidden-bar">
                 <div className="relative z-10 flex bg-white w-max items-center pr-8 ml-2 rounded-bl-[16px] rounded-br-[16px] rounded-tr-[16px] -mt-px">
                   <div className="flex gap-8 px-6 pt-3 pb-0 relative z-30">
                     {subTabs.map((tab, i) => (
@@ -392,7 +392,7 @@ const Table = ({
                                 onCellClick(item);
                               }
                             }}
-                            className={`py-[9px] px-3 transition-colors
+                            className={`py-3.5 px-3 transition-colors
                               ${isFirst ? "rounded-l-2xl pl-5" : ""}
                               ${isLast ? "rounded-r-2xl pr-5" : ""}
                               ${bgClass} ${borderClass}

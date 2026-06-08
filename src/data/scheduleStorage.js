@@ -69,6 +69,7 @@ export function getOrSeedSchedule(lead) {
   const base = {
     workStart: "",
     delayNote: "",
+    delayAttribution: "", // "client" | "our" — who caused the 7-day post-payment delay
     clientApproved: false, // client signed off on the work-start date
     breachReason: "", // "client" | "our" — who caused a possession breach
     confirmedAt: "", // ISO timestamp; once set the start is locked
@@ -81,6 +82,7 @@ export function getOrSeedSchedule(lead) {
       ...base,
       workStart: saved.workStart || "",
       delayNote: saved.delayNote || "",
+      delayAttribution: saved.delayAttribution || "",
       clientApproved: !!saved.clientApproved,
       breachReason: saved.breachReason || "",
       confirmedAt: saved.confirmedAt || "",

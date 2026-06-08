@@ -2309,7 +2309,7 @@ const Toast = ({ toast, onClose }) => {
           onClick={onClose}
           className="text-white/80 hover:text-white shrink-0"
         >
-          <X size={13} />
+          <X size={16} />
         </button>
       </div>
     </div>
@@ -2326,12 +2326,18 @@ const ConfirmDialog = ({
 }) => (
   <div
     className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-    onClick={onCancel}
   >
     <div
-      className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
+      className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative"
     >
+      <button
+        type="button"
+        onClick={onCancel}
+        className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+        title="Close dialog"
+      >
+        <X size={16} />
+      </button>
       <div className="p-5 flex items-start gap-3">
         <span
           className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
@@ -2386,11 +2392,9 @@ const SeedPicker = ({ onClose, onPick }) => {
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -2402,9 +2406,9 @@ const SeedPicker = ({ onClose, onPick }) => {
           <button
             type="button"
             onClick={onClose}
-            className="text-text-subtle hover:text-textcolor"
+            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
         <div className="p-4">
@@ -2416,19 +2420,19 @@ const SeedPicker = ({ onClose, onPick }) => {
           <div className="relative mb-3">
             <Search
               size={12}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search presets (e.g. 2BHK, Villa)"
-              className="w-full bg-bg-soft border border-transparent rounded-lg pl-7 pr-3 py-1.5 text-[11.5px] placeholder:text-text-subtle focus:outline-none focus:bg-white focus:border-select-blue/30"
+              className="w-full bg-bg-soft border border-transparent rounded-lg pl-7 pr-3 py-1.5 text-[11.5px] placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-select-blue/30"
               autoFocus
             />
           </div>
           {filtered.length === 0 ? (
-            <p className="text-[11px] text-text-subtle text-center py-6">
+            <p className="text-[11px] text-gray-400 text-center py-6">
               No presets match "{query}"
             </p>
           ) : (
@@ -2448,7 +2452,7 @@ const SeedPicker = ({ onClose, onPick }) => {
               ))}
             </div>
           )}
-          <p className="text-[10.5px] text-text-subtle mt-3 flex items-center gap-1">
+          <p className="text-[10.5px] text-gray-400 mt-3 flex items-center gap-1">
             <AlertTriangle size={10} /> Seeding replaces existing sections in
             this BOQ.
           </p>
@@ -2505,11 +2509,9 @@ const LibraryPicker = ({ onClose, onInsert }) => {
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[88vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
           <div className="flex items-center gap-2">
@@ -2529,7 +2531,7 @@ const LibraryPicker = ({ onClose, onInsert }) => {
           <button
             type="button"
             onClick={onClose}
-            className="text-text-subtle hover:text-textcolor"
+            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -2555,7 +2557,7 @@ const LibraryPicker = ({ onClose, onInsert }) => {
           <div className="relative">
             <Search
               size={12}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <input
               type="text"
@@ -2733,11 +2735,9 @@ const SectionTemplatePicker = ({ onClose, onAddBlank, onAddFromCategory }) => {
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[88vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
@@ -2772,7 +2772,7 @@ const SectionTemplatePicker = ({ onClose, onAddBlank, onAddFromCategory }) => {
           <button
             type="button"
             onClick={onClose}
-            className="text-text-subtle hover:text-textcolor"
+            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>

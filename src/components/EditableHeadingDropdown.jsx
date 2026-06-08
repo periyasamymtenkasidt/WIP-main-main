@@ -1,20 +1,23 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { ChevronDown, Search, Plus, Lock, Folder } from "lucide-react";
+import { ChevronDown, Search, Plus, Lock, Folder, Home } from "lucide-react";
 import {
   getScheduleHeadings,
   getCategoryFromHeading,
   getRoomCategories,
+  getRoomCategoryPresets,
 } from "../data/scheduleConfig";
 
 /**
  * Editable searchable dropdown for selecting/extending headings.
  *
  * Features:
- * - Dropdown values come from Schedule Master headings.
- * - Filtered by `category` prop (shows only headings belonging to that category).
- * - User can select an existing heading.
+ * - Primary categories come from Schedule Master → Room / Category Presets
+ *   (single source of truth — no hardcoded values).
+ * - Sub-headings come from Schedule Master headings filtered by category.
+ * - User can select a category or sub-heading.
  * - User can extend a heading name (e.g. "Kitchen - Island Area").
  * - The category prefix is locked/read-only — only the suffix is editable.
+ * - Dropdown remains fully editable until Save is clicked (Task 7).
  * - Includes "Create New Heading" option.
  */
 const EditableHeadingDropdown = ({
@@ -30,20 +33,28 @@ const EditableHeadingDropdown = ({
   const [search, setSearch] = useState("");
   const [isCustom, setIsCustom] = useState(false);
   const [customSuffix, setCustomSuffix] = useState("");
+  // Phase: "category" shows room/category presets first, "heading" shows
+  // sub-headings after a category is chosen.
+  const [phase, setPhase] = useState("category");
+  const [selectedCategory, setSelectedCategory] = useState(category || "");
   const dropdownRef = useRef(null);
   const inputRef = useRef(null);
   const customInputRef = useRef(null);
 
-  // Get all headings from Schedule Master, filtered by category
+  // Get all room/category presets from Schedule Master (single source of truth)
+  const roomCategories = useMemo(() => getRoomCategoryPresets(), []);
+
+  // Get all headings from Schedule Master, filtered by the resolved category
+  const resolvedCategory = selectedCategory || category;
   const allHeadings = useMemo(() => {
-    if (!category) return getScheduleHeadings();
-    return getScheduleHeadings(category);
-  }, [category]);
+    if (!resolvedCategory) return getScheduleHeadings();
+    return getScheduleHeadings(resolvedCategory);
+  }, [resolvedCategory]);
 
   // Also include headings from existing scope items that match the category
   const existingHeadingsInScope = useMemo(() => {
-    if (!category) return [];
-    const catUpper = category.toUpperCase();
+    if (!resolvedCategory) return [];
+    const catUpper = resolvedCategory.toUpperCase();
     const scopeHeadings = new Set();
     (existingScopeItems || []).forEach((item) => {
       const heading = (item.area || item.heading || "").trim().toUpperCase();
@@ -55,7 +66,7 @@ const EditableHeadingDropdown = ({
       }
     });
     return Array.from(scopeHeadings);
-  }, [category, existingScopeItems]);
+  }, [resolvedCategory, existingScopeItems]);
 
   // Combine Schedule Master headings with scope headings (deduplicated)
   const combinedHeadings = useMemo(() => {
@@ -93,11 +104,18 @@ const EditableHeadingDropdown = ({
     return headings;
   }, [combinedHeadings, excludeHeadingsWithItem, search]);
 
+  // Filter room categories by search
+  const filteredCategories = useMemo(() => {
+    if (!search.trim()) return roomCategories;
+    const q = search.trim().toUpperCase();
+    return roomCategories.filter((r) => r.name.toUpperCase().includes(q));
+  }, [roomCategories, search]);
+
   // Category prefix for locking
   const categoryPrefix = useMemo(() => {
-    if (!category) return "";
-    return category.trim();
-  }, [category]);
+    if (!resolvedCategory) return "";
+    return resolvedCategory.trim();
+  }, [resolvedCategory]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -121,12 +139,30 @@ const EditableHeadingDropdown = ({
     }
   }, [isCustom]);
 
+  // When dropdown opens, decide phase based on current value
+  useEffect(() => {
+    if (isOpen) {
+      if (value && resolvedCategory) {
+        setPhase("heading");
+      } else {
+        setPhase("category");
+      }
+    }
+  }, [isOpen]);
+
+  const handleSelectCategory = (catName) => {
+    setSelectedCategory(catName);
+    setPhase("heading");
+    setSearch("");
+  };
+
   const handleSelect = (heading) => {
     onChange(heading);
     setIsOpen(false);
     setSearch("");
     setIsCustom(false);
     setCustomSuffix("");
+    setPhase("category");
   };
 
   const handleCreateNew = () => {
@@ -153,6 +189,12 @@ const EditableHeadingDropdown = ({
       setIsCustom(false);
       setCustomSuffix("");
     }
+  };
+
+  const handleBackToCategories = () => {
+    setPhase("category");
+    setSearch("");
+    setSelectedCategory("");
   };
 
   const displayValue = value || "";
@@ -216,7 +258,7 @@ const EditableHeadingDropdown = ({
 
       {/* ── Dropdown panel ────────────────────────────────────── */}
       {isOpen && (
-        <div className="absolute z-50 top-full mt-1 w-full bg-white rounded-xl border border-bordergray shadow-xl max-h-[280px] flex flex-col overflow-hidden animate-fade-in">
+        <div className="absolute z-50 top-full mt-1 w-full bg-white rounded-xl border border-bordergray shadow-xl max-h-[320px] flex flex-col overflow-hidden animate-fade-in">
           {/* Search */}
           <div className="p-2 border-b border-bordergray shrink-0">
             <div className="relative">
@@ -229,65 +271,137 @@ const EditableHeadingDropdown = ({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search headings…"
+                placeholder={phase === "category" ? "Search categories…" : "Search headings…"}
                 autoFocus
                 className="w-full bg-bg-soft border border-transparent rounded-lg pl-6 pr-2 py-1.5 text-[11px] placeholder:text-text-subtle focus:outline-none focus:bg-white focus:border-select-blue/30"
               />
             </div>
           </div>
 
-          {/* Heading list */}
-          <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
-            {filteredHeadings.length === 0 && !search.trim() && (
-              <p className="text-[11px] text-text-subtle text-center py-3 italic">
-                No headings available for this category.
-              </p>
-            )}
-            {filteredHeadings.length === 0 && search.trim() && (
-              <p className="text-[11px] text-text-subtle text-center py-3 italic">
-                No headings match "{search}"
-              </p>
-            )}
-            {filteredHeadings.map((heading) => {
-              const isSelected =
-                heading.toUpperCase() === (value || "").toUpperCase();
-              return (
-                <button
-                  key={heading}
-                  type="button"
-                  onClick={() => handleSelect(heading)}
-                  className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all ${
-                    isSelected
-                      ? "bg-active-bg border border-select-blue/30 text-select-blue"
-                      : "hover:bg-bg-soft border border-transparent text-textcolor"
-                  }`}
-                >
-                  <Folder
-                    size={12}
-                    className={
-                      isSelected ? "text-select-blue" : "text-text-subtle"
-                    }
-                  />
-                  <span className="text-[11.5px] font-semibold truncate uppercase">
-                    {heading}
+          {phase === "category" ? (
+            /* ── Room / Category Presets list ────────────────── */
+            <>
+              <div className="px-3 py-1.5 border-b border-bordergray bg-bg-soft/50">
+                <span className="text-[9.5px] font-bold uppercase tracking-wider text-text-subtle">
+                  Room / Category Presets
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+                {filteredCategories.length === 0 && (
+                  <p className="text-[11px] text-text-subtle text-center py-3 italic">
+                    {search.trim() ? `No categories match "${search}"` : "No categories available."}
+                  </p>
+                )}
+                {filteredCategories.map((room) => {
+                  const isSelected =
+                    room.name.toUpperCase() === (value || "").toUpperCase() ||
+                    (value || "").toUpperCase().startsWith(room.name.toUpperCase());
+                  return (
+                    <button
+                      key={room.name}
+                      type="button"
+                      onClick={() => handleSelectCategory(room.name)}
+                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left transition-all ${
+                        isSelected
+                          ? "bg-active-bg border border-select-blue/30 text-select-blue"
+                          : "hover:bg-bg-soft border border-transparent text-textcolor"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Home
+                          size={12}
+                          className={
+                            isSelected ? "text-select-blue" : "text-text-subtle"
+                          }
+                        />
+                        <span className="text-[11.5px] font-semibold truncate">
+                          {room.name}
+                        </span>
+                      </div>
+                      {room.days && (
+                        <span className="text-[9.5px] text-text-subtle shrink-0">
+                          {room.days}d
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            /* ── Sub-headings list for selected category ────── */
+            <>
+              <div className="px-3 py-1.5 border-b border-bordergray bg-bg-soft/50 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleBackToCategories}
+                    className="text-[10px] font-semibold text-select-blue hover:text-primary transition-colors"
+                  >
+                    ← Categories
+                  </button>
+                  <span className="text-[9.5px] text-text-muted">·</span>
+                  <span className="text-[10px] font-bold text-textcolor uppercase">
+                    {resolvedCategory}
                   </span>
-                </button>
-              );
-            })}
-          </div>
+                </div>
+                <span className="text-[9px] font-semibold text-text-subtle">
+                  {filteredHeadings.length} heading{filteredHeadings.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+                {filteredHeadings.length === 0 && !search.trim() && (
+                  <p className="text-[11px] text-text-subtle text-center py-3 italic">
+                    No headings available for this category.
+                  </p>
+                )}
+                {filteredHeadings.length === 0 && search.trim() && (
+                  <p className="text-[11px] text-text-subtle text-center py-3 italic">
+                    No headings match "{search}"
+                  </p>
+                )}
+                {filteredHeadings.map((heading) => {
+                  const isSelected =
+                    heading.toUpperCase() === (value || "").toUpperCase();
+                  return (
+                    <button
+                      key={heading}
+                      type="button"
+                      onClick={() => handleSelect(heading)}
+                      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all ${
+                        isSelected
+                          ? "bg-active-bg border border-select-blue/30 text-select-blue"
+                          : "hover:bg-bg-soft border border-transparent text-textcolor"
+                      }`}
+                    >
+                      <Folder
+                        size={12}
+                        className={
+                          isSelected ? "text-select-blue" : "text-text-subtle"
+                        }
+                      />
+                      <span className="text-[11.5px] font-semibold truncate uppercase">
+                        {heading}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* Create New Heading */}
-          {categoryPrefix && (
-            <div className="p-2 border-t border-bordergray shrink-0">
-              <button
-                type="button"
-                onClick={handleCreateNew}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-select-blue/40 text-select-blue text-[11px] font-semibold hover:bg-active-bg/40 transition-all"
-              >
-                <Plus size={12} />
-                Create New Heading
-              </button>
-            </div>
+              {/* Create New Heading */}
+              {categoryPrefix && (
+                <div className="p-2 border-t border-bordergray shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleCreateNew}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-select-blue/40 text-select-blue text-[11px] font-semibold hover:bg-active-bg/40 transition-all"
+                  >
+                    <Plus size={12} />
+                    Create New Heading
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
