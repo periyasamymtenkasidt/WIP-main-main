@@ -120,6 +120,7 @@ export const getAllSites = () => {
     // Merge everything, prioritizing manual overrides
     const override = overrides[siteID] || {};
 
+<<<<<<< HEAD
     // Get advance payment info from milestones
     let advancePaidDate = null;
     let isAdvancePaid = false;
@@ -139,25 +140,37 @@ export const getAllSites = () => {
       console.error("Error reading client milestones in siteStorage", e);
     }
 
+=======
+>>>>>>> 88cd3d50588fe949154a932ec18fedc11a79a200
     return {
       siteID,
       clientID: c.clientID,
       clientName: c.clientName,
+<<<<<<< HEAD
       clientPhone: c.clientPhone || "",
       clientEmail: c.clientEmail || "",
       budget: c.budget || "",
+=======
+>>>>>>> 88cd3d50588fe949154a932ec18fedc11a79a200
       propertyPreset: override.propertyPreset || lead?.quotePreset || getDefaultPresetForType(c.location),
       siteType: c.location || "Residential",
       location: c.locationSecondary || "Main City",
       fullAddress: c.siteAddress || c.locationSecondary || "Site Location",
       status: override.status !== undefined ? override.status : null,
       progress: override.progress !== undefined ? override.progress : 0,
+<<<<<<< HEAD
       startDate: override.startDate || advancePaidDate || "Awaiting Advance Payment",
       targetDate: override.targetDate || autoTargetDate || defaultTargetDate,
       supervisor: override.supervisor !== undefined ? override.supervisor : null,
       notes: override.notes || autoNotes,
       isAdvancePaid,
       advancePaidDate,
+=======
+      startDate: c.joinDate || "01.01.2026",
+      targetDate: override.targetDate || autoTargetDate || defaultTargetDate,
+      supervisor: override.supervisor !== undefined ? override.supervisor : null,
+      notes: override.notes || autoNotes,
+>>>>>>> 88cd3d50588fe949154a932ec18fedc11a79a200
       ...override
     };
   });
