@@ -53,7 +53,7 @@ import {
 import { roomColor } from "../data/categoryColors";
 import CategorySelect from "./CategorySelect";
 import LibraryPickerModal from "./LibraryPickerModal";
-import { getRoomDefaultDays } from "../data/scheduleConfig";
+import { getRoomDefaultDays, getRoomCategoryPresets } from "../data/scheduleConfig";
 
 // ── Section Header ──────────────────────────────────────────────────────────
 const SectionHeader = ({ children }) => (
@@ -221,6 +221,38 @@ const buildSampleQuoteData = ({
   };
 };
 
+const EditableItemNameInput = ({ initialValue, onSave, className }) => {
+  const [localValue, setLocalValue] = useState(initialValue);
+
+  useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
+
+  const handleBlur = () => {
+    if (localValue !== initialValue) {
+      onSave(localValue);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.target.blur();
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={localValue || ""}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      placeholder="Item Name…"
+      className={className}
+    />
+  );
+};
+
 const inferSQPresetKey = (presetData) => {
   const keys = getPresetKeys();
   if (presetData?.presetKey && keys.includes(presetData.presetKey))
@@ -279,6 +311,16 @@ Digital Atelier`);
     return () => clearTimeout(t);
   }, [toast]);
 
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(null);
+  const handleDeleteGroup = (roomName) => {
+    setFormData((p) => ({
+      ...p,
+      scopeItems: p.scopeItems.filter((s) => (s.area || "").trim().toUpperCase() !== roomName.trim().toUpperCase()),
+    }));
+    setDeleteGroupConfirm(null);
+    showToast(`Deleted "${roomName}" group`, "info");
+  };
+
   const [destPrompt, setDestPrompt] = useState({
     isOpen: false,
     itemName: "",
@@ -292,32 +334,29 @@ Digital Atelier`);
   const getDestinationHeading = (itemName, scopeItems, category) => {
     return new Promise((resolve, reject) => {
       const resolvedCategory = category || getCategoryFromItemName(itemName);
-      const itemCatKey = getCategoryKey(resolvedCategory);
 
-      // Filter existing headings to only keep those belonging to the same category
+      // Get ALL headings from Schedule Master (all room/category presets)
+      const scheduleHeadingNames = getRoomCategoryPresets().map((r) => r.name.trim().toUpperCase());
+
+      // Collect ALL existing headings from scope items (not filtered by category)
       const existingHeadings = Array.from(
         new Set(scopeItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
-      ).filter(h => getHeadingCategoryKey(h, scopeItems) === itemCatKey);
+      );
 
-      // Check which headings already contain this item
+      // Combine and deduplicate
+      const allHeadings = Array.from(new Set([...scheduleHeadingNames, ...existingHeadings]));
+
+      // Informational only — not used to hide headings
       const headingsWithItem = scopeItems
         .filter((item) => (item.itemName || "").trim().toLowerCase() === itemName.trim().toLowerCase())
         .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
 
-      // Single Heading Exception - only if there is exactly 1 heading of the matching category
-      if (existingHeadings.length === 1) {
-        const singleHeading = existingHeadings[0];
-        if (!headingsWithItem.includes(singleHeading)) {
-          resolve(singleHeading);
-          return;
-        }
-      }
 
       setDestPrompt({
         isOpen: true,
         itemName,
         category: resolvedCategory,
-        existingHeadings,
+        existingHeadings: allHeadings,
         headingsWithItem,
         onSelect: (selectedHeading) => {
           setDestPrompt((prev) => ({ ...prev, isOpen: false }));
@@ -539,6 +578,9 @@ Digital Atelier`);
           if (key === "area") {
             target.isAreaCustom = true;
           }
+          if (key === "itemName") {
+            target.isItemNameCustom = true;
+          }
           return target;
         }),
       };
@@ -740,12 +782,13 @@ Digital Atelier`);
       subtitle="Preview quote with scope from Proposal Master. Edit scope, preview, then print."
       onClose={onClose}
       footer={footer}
-      maxWidth="max-w-[1100px]"
-      maxHeight="max-h-[95vh]"
+      maxWidth="max-w-[1300px]"
+      maxHeight="h-[90vh]"
+      bodyScrollable={false}
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6 h-full min-h-0">
         {/* ── Form pane ── */}
-        <div className="modal-no-print">
+        <div className="modal-no-print overflow-y-auto h-full pr-2 scroll-hidden-bar">
           {/* Property Preset (read-only display) */}
           <div className="mb-5">
             <SectionHeader>Property Preset</SectionHeader>
@@ -822,12 +865,12 @@ Digital Atelier`);
                     className="border border-bordergray rounded-xl bg-white overflow-hidden shadow-sm"
                   >
                     {/* Accordion Header */}
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group.room)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-bg-soft/40 hover:bg-bg-soft/70 transition-colors cursor-pointer border-b border-bordergray"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-full flex items-center justify-between px-3.5 py-2.5 bg-bg-soft/40 hover:bg-bg-soft/70 transition-colors border-b border-bordergray">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.room)}
+                        className="flex-1 flex items-center gap-2 min-w-0 text-left cursor-pointer focus:outline-none"
+                      >
                         {groupOpen ? (
                           <ChevronDown
                             size={13}
@@ -848,11 +891,21 @@ Digital Atelier`);
                         <span className="text-[10px] font-semibold text-text-muted bg-bg-soft px-1.5 py-0.5 rounded-md border border-bordergray">
                           {group.rows.length}
                         </span>
+                      </button>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-[11px] font-bold text-textcolor tabular-nums">
+                          {formatAmount(group.total)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteGroupConfirm(group.room)}
+                          className="p-1 rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer"
+                          title={`Delete ${group.room} and all its items`}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-                      <span className="text-[11px] font-bold text-textcolor tabular-nums shrink-0">
-                        {formatAmount(group.total)}
-                      </span>
-                    </button>
+                    </div>
 
                     {/* Accordion Content */}
                     {groupOpen && (
@@ -862,25 +915,19 @@ Digital Atelier`);
                             key={idx}
                             className="rounded-lg border border-border bg-bg-soft/30 p-2 space-y-2"
                           >
-                            <div className="flex items-center justify-between text-[10px] text-text-muted font-bold tracking-wide uppercase">
-                              <span>{item._displayCategory}</span>
-                            </div>
                             <div className="grid grid-cols-[1fr_1.5fr_110px_28px] gap-2 items-start">
                               <input
                                 type="text"
+                                value={item.itemName || ""}
                                 readOnly={true}
-                                value={item.area || ""}
-                                placeholder="Heading/Room…"
                                 className="bg-bg-soft border border-bordergray text-[11px] text-text-muted rounded-md px-2 py-2 w-full cursor-not-allowed focus:outline-none"
                               />
                               <input
                                 type="text"
                                 value={item.description || ""}
-                                onChange={(e) =>
-                                  updateScope(idx, "description", e.target.value)
-                                }
+                                readOnly={true}
                                 placeholder="Description"
-                                className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
+                                className="bg-bg-soft border border-bordergray text-[11px] text-text-muted rounded-md px-2 py-2 w-full cursor-not-allowed focus:outline-none"
                               />
                               <input
                                 type="number"
@@ -1154,8 +1201,8 @@ Digital Atelier`);
         </div>
 
         {/* ── Preview pane ── */}
-        <div className="lg:sticky lg:top-0 lg:self-start">
-          <p className="text-[10px] uppercase tracking-widest text-text-subtle font-bold mb-2 modal-no-print">
+        <div className="overflow-y-auto h-full pl-2 scroll-hidden-bar">
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-2 modal-no-print">
             Live Preview
           </p>
           <div className="quote-print-area rounded-xl border border-border bg-white p-6 shadow-sm">
@@ -1189,7 +1236,7 @@ Digital Atelier`);
               <button
                 type="button"
                 onClick={() => setTermsParentModalOpen(false)}
-                className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-bordergray transition-all cursor-pointer"
+                className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1209,10 +1256,10 @@ Digital Atelier`);
                       setActiveCategoryModal(cat.id);
                       setTermsParentModalOpen(false);
                     }}
-                    className="w-full flex items-center justify-between p-3.5 rounded-xl border border-bordergray bg-white hover:border-select-blue/30 hover:bg-bg-soft/40 transition-all shadow-xs cursor-pointer group text-left"
+                    className="w-full flex items-center justify-between p-3.5 rounded-xl border border-bordergray bg-white hover:border-select-blue/30 hover:bg-bg-soft/40 transition-colors shadow-xs cursor-pointer group text-left"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-select-blue/5 text-select-blue group-hover:bg-select-blue group-hover:text-white transition-all">
+                      <div className="p-2 rounded-lg bg-select-blue/5 text-select-blue group-hover:bg-select-blue group-hover:text-white transition-colors">
                         <Icon size={16} />
                       </div>
                       <div>
@@ -1357,7 +1404,7 @@ Digital Atelier`);
               <button
                 type="button"
                 onClick={() => setShowEmailForm(false)}
-                className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-bordergray transition-all cursor-pointer"
+                className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1455,6 +1502,36 @@ Digital Atelier`);
         onSelect={destPrompt.onSelect}
         onCreateNew={destPrompt.onCreateNew}
       />
+
+      {deleteGroupConfirm && (
+        <Modal
+          title={`Delete ${deleteGroupConfirm}?`}
+          onClose={() => setDeleteGroupConfirm(null)}
+          footer={
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteGroupConfirm(null)}
+                className="px-4 py-2 border border-bordergray rounded-xl text-textcolor hover:bg-bg-soft text-[11px] font-bold transition-all shadow-xs cursor-pointer bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteGroup(deleteGroupConfirm)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[11px] font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          }
+          maxWidth="max-w-[400px]"
+        >
+          <p className="text-[12.5px] text-text-muted leading-relaxed">
+            Are you sure you want to delete the category <strong>{deleteGroupConfirm}</strong> and all its associated items? This action cannot be undone.
+          </p>
+        </Modal>
+      )}
 
       {toast && (
         <Toast key={toast.id} toast={toast} onClose={() => setToast(null)} />

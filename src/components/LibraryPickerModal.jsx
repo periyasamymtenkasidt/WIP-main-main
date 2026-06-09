@@ -61,7 +61,7 @@ const LibraryPickerModal = ({ excludeId, onClose, onPick }) => {
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-text-subtle hover:text-textcolor">
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer">
             <X size={16} />
           </button>
         </div>

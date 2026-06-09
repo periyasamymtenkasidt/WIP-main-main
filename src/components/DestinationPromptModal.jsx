@@ -4,13 +4,19 @@ import {
   getScheduleHeadings,
   getCategoryFromHeading,
   addScheduleHeading,
+  getRoomCategoryPresets,
 } from "../data/scheduleConfig";
 
 /**
  * Reusable modal for selecting a destination heading or creating a new one.
- * Uses category-based filtering from Schedule Master (single source of truth).
- * Heading dropdowns show only headings belonging to the selected category.
- * New headings are created with a locked category prefix.
+ * Uses Room / Category Presets from Schedule Master (single source of truth).
+ *
+ * Shows ALL available headings from ALL categories so users can assign scopes
+ * from one category to another category heading. The "Create New" form still
+ * locks the prefix to the *resolved* category of the item being assigned.
+ *
+ * Previously selected scopes remain visible — duplicate detection is handled
+ * by the caller's duplicate-warning workflow, not by hiding headings.
  */
 const DestinationPromptModal = ({
   isOpen,
@@ -36,14 +42,16 @@ const DestinationPromptModal = ({
     return cat || itemCategory;
   }, [itemCategory]);
 
-  // Get headings from Schedule Master filtered by category
+  // Get ALL headings from ALL room/category presets (not just the matched one).
+  // This allows cross-category assignment (e.g. placing Living Room scope
+  // under Dining Area heading).
   const scheduleHeadings = useMemo(() => {
-    if (!resolvedCategory) return getScheduleHeadings().map((h) => h.name);
-    return getScheduleHeadings(resolvedCategory).map((h) => h.name);
-  }, [resolvedCategory]);
+    const presets = getRoomCategoryPresets();
+    return presets.map((r) => r.name);
+  }, []);
 
   // Merge schedule headings with existing scope headings (deduplicated)
-  const allCategoryHeadings = useMemo(() => {
+  const allHeadings = useMemo(() => {
     const set = new Set();
     const result = [];
     scheduleHeadings.forEach((h) => {
@@ -80,13 +88,10 @@ const DestinationPromptModal = ({
 
   if (!isOpen) return null;
 
-  // Filter out headings that already contain this item
-  const availableHeadings = allCategoryHeadings.filter(
-    (h) =>
-      !headingsWithItem.some(
-        (ex) => ex.trim().toUpperCase() === h.trim().toUpperCase(),
-      ),
-  );
+  // Do NOT filter out headings that already contain this item —
+  // they remain visible and selectable. Duplicate detection is handled
+  // by the caller's duplicate-warning workflow.
+  const availableHeadings = allHeadings;
 
   // Apply search filter
   const searchedHeadings = search.trim()
@@ -108,18 +113,8 @@ const DestinationPromptModal = ({
       ? `${resolvedCategory} - ${suffix}`.toUpperCase()
       : suffix.toUpperCase();
 
-    // Check if this heading already exists and has the item
-    if (
-      headingsWithItem.some(
-        (ex) => ex.trim().toUpperCase() === newHeading,
-      )
-    ) {
-      setError(`Heading "${newHeading}" already contains this item`);
-      return;
-    }
-
     // Check if heading exists — just select it
-    const existingMatch = allCategoryHeadings.find(
+    const existingMatch = allHeadings.find(
       (h) => h.trim().toUpperCase() === newHeading,
     );
     if (existingMatch) {
@@ -168,7 +163,7 @@ const DestinationPromptModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-bordergray transition-all cursor-pointer"
+            className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -192,39 +187,51 @@ const DestinationPromptModal = ({
             />
           </div>
 
-          {/* List of existing headings */}
+          {/* List of all available headings */}
           <div>
             <h4 className="text-[10px] font-bold text-text-subtle tracking-wider uppercase mb-2">
-              {resolvedCategory ? `${resolvedCategory} Headings` : "Existing Headings"}
+              Available Headings
             </h4>
             {searchedHeadings.length === 0 ? (
               <p className="text-[11px] text-text-muted italic bg-bg-soft/40 p-3 rounded-lg border border-bordergray/50">
-                {availableHeadings.length > 0
+                {search.trim()
                   ? "No headings match your search."
-                  : existingHeadings.length > 0
-                    ? "All existing headings already contain this item."
-                    : "No headings exist yet for this category."}
+                  : "No headings available."}
               </p>
             ) : (
               <div className="space-y-1.5">
-                {searchedHeadings.map((heading) => (
-                  <button
-                    key={heading}
-                    type="button"
-                    onClick={() => onSelect(heading.toUpperCase())}
-                    className="w-full flex items-center justify-between p-3 rounded-xl border border-bordergray bg-white hover:border-select-blue/30 hover:bg-active-bg/20 transition-all shadow-xs cursor-pointer text-left group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Folder
-                        size={14}
-                        className="text-select-blue shrink-0"
-                      />
-                      <span className="text-[12px] font-semibold text-textcolor group-hover:text-select-blue truncate uppercase">
-                        {heading}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                {searchedHeadings.map((heading) => {
+                  const alreadyHasItem = headingsWithItem.some(
+                    (ex) => ex.trim().toUpperCase() === heading.trim().toUpperCase(),
+                  );
+                  return (
+                    <button
+                      key={heading}
+                      type="button"
+                      onClick={() => onSelect(heading.toUpperCase())}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border bg-white hover:border-select-blue/30 hover:bg-active-bg/20 transition-all shadow-xs cursor-pointer text-left group ${
+                        alreadyHasItem
+                          ? "border-amber-200 bg-amber-50/30"
+                          : "border-bordergray"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Folder
+                          size={14}
+                          className="text-select-blue shrink-0"
+                        />
+                        <span className="text-[12px] font-semibold text-textcolor group-hover:text-select-blue truncate uppercase">
+                          {heading}
+                        </span>
+                      </div>
+                      {alreadyHasItem && (
+                        <span className="text-[9px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-md shrink-0">
+                          has item
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

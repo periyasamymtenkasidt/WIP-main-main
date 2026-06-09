@@ -573,9 +573,9 @@ const ProjectDetail = () => {
   const collectedPct = Math.min(progress, 100);
 
   return (
-    <div className="bg-overallbg p-6 font-sans h-full overflow-y-scroll">
+    <div className="bg-overallbg p-6 font-sans h-full flex flex-col overflow-y-auto lg:overflow-hidden scroll-hidden-bar">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate("/projects")}
@@ -610,10 +610,10 @@ const ProjectDetail = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 w-full items-start">
-        <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 w-full lg:items-stretch lg:overflow-hidden min-h-0">
+        <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0 lg:min-h-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
           {/* Card 1: identity + 2-tier stepper */}
-          <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)]">
+          <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] shrink-0">
             <div className="flex justify-between items-start">
               <div>
                 <div className="flex items-center gap-3 mb-3">
@@ -725,7 +725,7 @@ const ProjectDetail = () => {
           </div>
 
           {/* Card 2: Investment + Info Grid */}
-          <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex flex-col md:flex-row gap-6 shrink-0">
             <div className="bg-white rounded-[20px] p-7 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] w-full md:w-[35%] flex flex-col justify-between">
               <div>
                 <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider mb-3">
@@ -795,7 +795,7 @@ const ProjectDetail = () => {
           <ProjectSchedule lead={lead} />
 
           {/* Communication Log — tab filtered, latest visible without scrolling */}
-          <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] overflow-hidden">
+          <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] overflow-hidden shrink-0">
             <div className="px-6 pt-5">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <div>
@@ -872,7 +872,7 @@ const ProjectDetail = () => {
         </div>
 
         {/* Right sidebar — read-only */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0">
+        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0 lg:min-h-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
           <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] flex flex-col items-center text-center">
             <div className="relative mb-5">
               <div className="w-[100px] h-[100px] rounded-full overflow-hidden border-[5px] border-white shadow-[0_4px_15px_-3px_rgba(0,0,0,0.15)]">

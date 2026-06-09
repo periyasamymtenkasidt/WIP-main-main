@@ -1,5 +1,6 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { FiPhone, FiEdit3 } from "react-icons/fi";
+import { X } from "lucide-react";
 
 const TABS = [
   { key: "call", label: "Log Call", icon: FiPhone },
@@ -37,7 +38,15 @@ const LogActivityModal = ({ defaultTab = "call", onClose, onSubmit }) => {
 
   return (
     <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-      <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[480px] mx-auto p-6">
+      <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[480px] mx-auto p-6 relative">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+          title="Close"
+        >
+          <X size={16} />
+        </button>
         <div className="flex items-start gap-3 mb-5">
           <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
             {tab === "call" ? <FiPhone size={22} /> : <FiEdit3 size={22} />}

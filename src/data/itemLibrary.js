@@ -248,8 +248,9 @@ const normalizeCategory = (cat) =>
 // category (Master → Schedule), so durations stay sensible without per-item entry.
 const normalizeItem = (it) => {
   const category = normalizeCategory(it.category);
+  const defaultDays = getRoomDefaultDays(category);
   const days =
-    it.days != null && it.days !== "" ? it.days : getRoomDefaultDays(category);
+    defaultDays !== "" && defaultDays != null ? defaultDays : (it.days ?? "");
   return { ...it, category, days };
 };
 

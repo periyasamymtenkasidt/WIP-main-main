@@ -11,7 +11,10 @@ import {
   FiMail,
   FiMessageCircle,
   FiFileText,
+  FiX,
 } from "react-icons/fi";
+import { FaWhatsapp } from "react-icons/fa6";
+
 import { ClientTableData } from "../../data/ClientTableData";
 import { PAYMENT_MILESTONES } from "../../data/MilestoneConfig";
 import EditClientForm from "./EditClientForm";
@@ -220,9 +223,9 @@ const ClientProfile = () => {
   ];
 
   return (
-    <div className="bg-overallbg p-6 font-sans overflow-y-scroll h-full">
+    <div className="bg-overallbg p-6 font-sans h-full flex flex-col overflow-y-auto lg:overflow-hidden scroll-hidden-bar">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -268,9 +271,9 @@ const ClientProfile = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 w-full items-start">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 w-full lg:items-stretch lg:overflow-hidden min-h-0">
         {/* Left Column (Sidebar) */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0">
+        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
           {/* Profile Card */}
           <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] flex flex-col items-center text-center">
             <div className="relative mb-5">
@@ -317,7 +320,7 @@ const ClientProfile = () => {
               </button>
               <div className="flex gap-2.5">
                 <button className="flex-1 py-2.5 bg-palewhite hover:bg-bg-soft text-grey rounded-[12px] text-[12px] font-bold flex items-center justify-center gap-1.5 transition-colors border border-transparent hover:border-border">
-                  <FiMessageCircle size={14} /> WhatsApp
+                  <FaWhatsapp size={14} /> WhatsApp
                 </button>
                 <button className="flex-1 py-2.5 bg-palewhite hover:bg-bg-soft text-grey rounded-[12px] text-[12px] font-bold flex items-center justify-center gap-1.5 transition-colors border border-transparent hover:border-border">
                   <FiMail size={14} /> Email
@@ -396,7 +399,7 @@ const ClientProfile = () => {
         </div>
 
         {/* Right Column (Main Content) */}
-        <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0">
+        <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {milestones ? (
@@ -892,7 +895,15 @@ const ClientProfile = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-          <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[400px] mx-auto p-6 text-center">
+          <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[400px] mx-auto p-6 text-center relative">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+              title="Close dialog"
+            >
+              <FiX size={16} />
+            </button>
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-4">
               <FiTrash2 size={24} />
             </div>
