@@ -30,10 +30,7 @@ const Deals = lazy(() => import("../pages/deals/Deals"));
 const Projects = lazy(() => import("../pages/projects/Projects"));
 const ProjectDetail = lazy(() => import("../pages/projects/ProjectDetail"));
 const Sites = lazy(() => import("../pages/sites/Sites"));
-<<<<<<< HEAD
 const SiteDetail = lazy(() => import("../pages/sites/SiteDetail"));
-=======
->>>>>>> 88cd3d50588fe949154a932ec18fedc11a79a200
 const Master=lazy(()=>import("../pages/master/Master"));
 const ProposalMaster=lazy(()=>import("../pages/master/proposalMaster/ProposalMaster"));
 const ItemLibrary=lazy(()=>import("../pages/master/itemMaster/ItemLibrary"));
@@ -80,14 +77,10 @@ const AppRoutes = () => {
                 <Route index element={<Projects />} />
                 <Route path=":id" element={<ProjectDetail />} />
               </Route>
-<<<<<<< HEAD
               <Route path="sitevisit">
                 <Route index element={<Sites />} />
                 <Route path=":id" element={<SiteDetail />} />
               </Route>
-=======
-              <Route path="sitevisit" element={<Sites />} />
->>>>>>> 88cd3d50588fe949154a932ec18fedc11a79a200
               <Route path="boq">
                 <Route index element={<BOQList />} />
                 <Route path=":id" element={<BOQEditor />} />
