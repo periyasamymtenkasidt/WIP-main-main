@@ -62,9 +62,9 @@ import Modal from "../../../components/Modal";
 import {
   getRoomDefaultDays,
   getScheduleConfig,
-  getScheduleHeadings,
   getCategoryFromHeading,
   addScheduleHeading,
+  getRoomCategoryPresets,
 } from "../../../data/scheduleConfig";
 import { computeLibraryItemAmount } from "../../../data/itemLibrary";
 import { PROPERTY_TYPES } from "../../../helperConfigData/helperData";
@@ -401,6 +401,9 @@ const ProposalMaster = () => {
           if (key === "area") {
             target.isAreaCustom = true;
           }
+          if (key === "itemName") {
+            target.isItemNameCustom = true;
+          }
           return target;
         }),
       };
@@ -430,22 +433,19 @@ const ProposalMaster = () => {
     const areaName = preset.name;
     const rootCategory = getCategoryFromHeading(areaName);
 
-    // Get headings from Schedule Master filtered by category
-    const scheduleHeadingNames = getScheduleHeadings(rootCategory).map((h) =>
-      h.name.trim().toUpperCase(),
+    // Get ALL headings from Schedule Master (all room/category presets)
+    const scheduleHeadingNames = getRoomCategoryPresets().map((r) =>
+      r.name.trim().toUpperCase(),
     );
 
-    // Collect existing headings from scope items that match the same category
+    // Collect ALL existing headings from scope items (not filtered by category)
     const scopeHeadings = Array.from(
       new Set(
         currentScopeItems.map((s) =>
           (s.area || s.heading || "Unassigned").trim().toUpperCase(),
         ),
       ),
-    ).filter((h) => {
-      const hCat = getCategoryFromHeading(h).toUpperCase();
-      return hCat === rootCategory.toUpperCase();
-    });
+    );
 
     // Combine and deduplicate
     const existingHeadings = Array.from(
@@ -453,6 +453,7 @@ const ProposalMaster = () => {
     );
 
     // Headings that already contain this exact area name as a scope item
+    // (kept for informational display, no longer used to hide headings)
     const headingsWithItem = currentScopeItems
       .filter(
         (s) =>
@@ -461,28 +462,6 @@ const ProposalMaster = () => {
       )
       .map((s) => (s.area || s.heading || "Unassigned").trim().toUpperCase());
 
-    // Single Heading Exception — 0 or 1 headings of matching category: add directly
-    if (existingHeadings.length <= 1) {
-      const targetArea =
-        existingHeadings.length === 1 ? existingHeadings[0] : areaName;
-      const newRow = {
-        area: targetArea,
-        description: "",
-        amount: 0,
-        days:
-          preset.days != null && preset.days !== ""
-            ? preset.days
-            : getRoomDefaultDays(areaName),
-        materials: [],
-      };
-      setConfigField((cfg) => ({
-        ...cfg,
-        scopeItems: addScopeItemsWithDuplicateCheck(cfg.scopeItems, [newRow]),
-      }));
-      setExpanded((p) => ({ ...p, [0]: false }));
-      showToast(`Added "${areaName}"`, "success");
-      return;
-    }
 
     // Multiple headings — show destination prompt with category-filtered headings
     setDestPrompt({
@@ -2544,12 +2523,18 @@ const ConfirmDialog = ({
 }) => (
   <div
     className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]"
-    onClick={onCancel}
   >
     <div
-      className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
+      className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative"
     >
+      <button
+        type="button"
+        onClick={onCancel}
+        className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+        title="Close dialog"
+      >
+        <X size={16} />
+      </button>
       <div className="p-5 flex items-start gap-3">
         <span
           className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 ${
@@ -2595,11 +2580,9 @@ const ConfirmDialog = ({
 const ShortcutsModal = ({ onClose }) => (
   <div
     className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-    onClick={onClose}
   >
     <div
       className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
     >
       <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -2611,9 +2594,9 @@ const ShortcutsModal = ({ onClose }) => (
         <button
           type="button"
           onClick={onClose}
-          className="text-text-subtle hover:text-textcolor"
+          className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       </div>
       <div className="p-5 space-y-2.5">

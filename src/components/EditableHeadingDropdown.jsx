@@ -110,6 +110,13 @@ const EditableHeadingDropdown = ({
     return roomCategories.filter((r) => r.name.toUpperCase().includes(q));
   }, [roomCategories, typedValue, isTyping]);
 
+  // Filter room categories by search
+  const filteredCategories = useMemo(() => {
+    if (!search.trim()) return roomCategories;
+    const q = search.trim().toUpperCase();
+    return roomCategories.filter((r) => r.name.toUpperCase().includes(q));
+  }, [roomCategories, search]);
+
   // Category prefix for locking
   const categoryPrefix = useMemo(() => {
     if (!resolvedCategory) return "";

@@ -141,7 +141,7 @@ const ItemLibrary = () => {
   };
 
   return (
-    <div className="bg-overallbg font-sans h-full overflow-y-auto">
+    <div className="bg-overallbg font-sans h-full overflow-y-auto scroll-hidden-bar">
       {/* Header */}
       <div className="px-6 py-5 border-b border-bordergray/70 bg-overallbg/80 backdrop-blur-xl sticky top-0 z-10">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
@@ -400,11 +400,9 @@ const BentoStat = ({ icon, label, value, tint }) => {
 const ConfirmDialog = ({ title, message, confirmLabel, danger, onCancel, onConfirm }) => (
   <div
     className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-    onClick={onCancel}
   >
     <div
       className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
     >
       <div className="p-5 flex items-start gap-3">
         <span

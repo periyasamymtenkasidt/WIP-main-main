@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   Plus,
   Search,
@@ -19,9 +19,9 @@ import CategorySelect from "./CategorySelect";
 import {
   getScheduleConfig,
   getRoomDefaultDays,
-  getScheduleHeadings,
   getCategoryFromHeading,
   addScheduleHeading,
+  getRoomCategoryPresets,
 } from "../data/scheduleConfig";
 import { roomColor } from "../data/categoryColors";
 import {
@@ -187,32 +187,22 @@ const ItemFormModal = ({
       // Use Schedule Master heading to get the root category
       const rootCategory = getCategoryFromHeading(resolvedCategory);
 
-      // Get headings from Schedule Master filtered by category
-      const scheduleHeadingNames = getScheduleHeadings(rootCategory).map((h) => h.name.toUpperCase());
+      // Get ALL headings from Schedule Master (all room/category presets)
+      const scheduleHeadingNames = getRoomCategoryPresets().map((r) => r.name.toUpperCase());
 
-      // Also include headings from existing scope items that match the category
+      // Also include ALL headings from existing scope items (not filtered by category)
       const scopeHeadings = Array.from(
         new Set(allItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
-      ).filter(h => {
-        const hCat = getCategoryFromHeading(h).toUpperCase();
-        return hCat === rootCategory.toUpperCase();
-      });
+      );
 
       // Combine and deduplicate
       const existingHeadings = Array.from(new Set([...scheduleHeadingNames, ...scopeHeadings]));
 
+      // Informational only — not used to hide headings
       const headingsWithItem = allItems
         .filter((item) => (item.itemName || item.description || "").trim().toLowerCase() === itemName.trim().toLowerCase())
         .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
 
-      // Single Heading Exception - only if there is exactly 1 heading of the matching category
-      if (existingHeadings.length <= 1) {
-        const singleHeading = existingHeadings.length === 1 ? existingHeadings[0] : rootCategory.toUpperCase();
-        if (!headingsWithItem.includes(singleHeading)) {
-          resolve(singleHeading);
-          return;
-        }
-      }
 
       setDestPrompt({
         isOpen: true,
@@ -258,7 +248,8 @@ const ItemFormModal = ({
   useEffect(() => {
     if (roomCategoryMode && watchedItemName && watchedItemName !== prevItemName) {
       const desc = getDetailedDescription(watchedItemName);
-      if (desc) {
+      // Only populate description when actual data exists (Req 6)
+      if (desc && desc !== watchedItemName) {
         rhfSetValue("spec", desc, { shouldValidate: true });
       }
       setPrevItemName(watchedItemName);
@@ -271,10 +262,58 @@ const ItemFormModal = ({
     return getCategoryFromHeading(watchedHeading);
   }, [watchedHeading]);
 
+  // ── Reset dependent fields when heading/category changes ────────────────
+  // Tracks the previous heading so we can detect a genuine category switch
+  // (not the initial render or same-heading re-selection).
+  const prevHeadingRef = useRef(watchedHeading || "");
+  useEffect(() => {
+    if (!roomCategoryMode) return;
+    const prev = prevHeadingRef.current;
+    const next = watchedHeading || "";
+    prevHeadingRef.current = next;
+
+    // Skip no-change cases, and skip if next is empty (e.g. cleared)
+    if (!next || prev === next) return;
+
+    // Determine if the ROOT category actually changed
+    const prevCat = getCategoryFromHeading(prev);
+    const nextCat = getCategoryFromHeading(next);
+
+    // Map Number of Days immediately from Schedule Master when heading changes
+    // (Req 2) — regardless of whether the category changed or not
+    const newDefaultDays = getRoomDefaultDays(nextCat);
+
+    if (prevCat === nextCat) {
+      update({
+        days: newDefaultDays,
+      });
+      return;
+    }
+
+    // Category changed — clear all dependent fields
+    rhfSetValue("itemName", "", { shouldValidate: false });
+    rhfSetValue("spec", "", { shouldValidate: false });
+    rhfSetValue("rate", 0, { shouldValidate: false });
+    rhfSetValue("hsn", "", { shouldValidate: false });
+    rhfSetValue("length", 0, { shouldValidate: false });
+    rhfSetValue("breadth", 0, { shouldValidate: false });
+    rhfSetValue("height", 0, { shouldValidate: false });
+    rhfSetValue("qty", 0, { shouldValidate: false });
+    update({
+      days: newDefaultDays,
+      materials: [],
+      unit: "sqft",
+      gstPercent: 18,
+      masterId: undefined,
+    });
+    setPrevItemName("");
+  }, [watchedHeading, roomCategoryMode]);
+
   // Auto-populate fields when an item is selected from the FilteredItemNameDropdown
   const handleItemNameSelect = (libraryItem) => {
     const itemName = libraryItem.description || "";
-    const spec = libraryItem.spec || getDetailedDescription(itemName) || itemName;
+    // Only populate spec from actual data — don't fallback to itemName (Req 6)
+    const spec = libraryItem.spec || getDetailedDescription(itemName) || "";
     rhfSetValue("itemName", itemName, { shouldValidate: true });
     rhfSetValue("spec", spec, { shouldValidate: true });
     rhfSetValue("rate", libraryItem.rate || 0, { shouldValidate: true });
@@ -300,14 +339,15 @@ const ItemFormModal = ({
   const libraryItemToFormState = (lib) => {
     const defaultHeading = (lib.category || "").toUpperCase();
     const defaultItemName = lib.description || "";
-    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || defaultItemName;
+    // Only populate spec from actual data — don't fallback to itemName (Req 6)
+    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || "";
     return {
       ...blankLibraryItem(),
       ...lib,
       draftId: Math.random().toString(36).substring(2, 9),
       heading: defaultHeading,
       itemName: defaultItemName,
-      description: defaultSpec,
+      description: defaultItemName,
       spec: defaultSpec,
       hsn: lib.hsn || "",
       rate: lib.rate || 0,
@@ -326,11 +366,16 @@ const ItemFormModal = ({
   const fillFromLibrary = (lib) => {
     const defaultHeading = (lib.category || "").toUpperCase();
     const defaultItemName = lib.description || "";
-    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || defaultItemName;
+    // Only populate spec from actual data — don't fallback to itemName (Req 6)
+    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || "";
+    
+    prevHeadingRef.current = defaultHeading;
+    setPrevItemName(defaultItemName);
+
     rhfReset({
       heading: defaultHeading,
       itemName: defaultItemName,
-      description: defaultSpec,
+      description: defaultItemName,
       spec: defaultSpec,
       hsn: lib.hsn || "",
       rate: lib.rate || 0,
@@ -346,7 +391,7 @@ const ItemFormModal = ({
       masterId: lib.id,
       heading: defaultHeading,
       itemName: defaultItemName,
-      description: defaultSpec,
+      description: defaultItemName,
       spec: defaultSpec,
       materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
       tags: lib.tags ? [...lib.tags] : [],
@@ -375,11 +420,15 @@ const ItemFormModal = ({
         // Process one category at a time — one destination prompt per category
         for (const [category, items] of categoryGroups) {
           // Get the destination heading for this category (shown once)
-          let heading;
-          try {
-            heading = await getDestinationHeading(category, category);
-          } catch {
-            continue; // user cancelled this category, skip all its items
+          let heading = "";
+          if (roomCategoryMode) {
+            try {
+              heading = await getDestinationHeading(category, category);
+            } catch {
+              continue; // user cancelled this category, skip all its items
+            }
+          } else {
+            heading = category;
           }
 
           // Bulk-assign all non-duplicate items in this category
@@ -433,13 +482,20 @@ const ItemFormModal = ({
         setPickerOpen(false);
       } else {
         const itemName = libOrLibs.description || "";
-        const heading = await getDestinationHeading(itemName, libOrLibs.category);
+        const heading = roomCategoryMode
+          ? (initial?.heading || watchedHeading || await getDestinationHeading(itemName, libOrLibs.category))
+          : "";
         
-        const defaultSpec = libOrLibs.spec || getDetailedDescription(itemName) || itemName;
+        const defaultSpec = libOrLibs.spec || getDetailedDescription(itemName) || "";
+        const resolvedDays = libOrLibs.days !== "" && libOrLibs.days != null ? libOrLibs.days : getRoomDefaultDays(libOrLibs.category || "");
+
+        prevHeadingRef.current = heading;
+        setPrevItemName(itemName);
+
         rhfReset({
           heading: heading,
           itemName: itemName,
-          description: defaultSpec,
+          description: itemName,
           spec: defaultSpec,
           hsn: libOrLibs.hsn || "",
           rate: libOrLibs.rate || 0,
@@ -455,10 +511,11 @@ const ItemFormModal = ({
           masterId: libOrLibs.id,
           heading: heading,
           itemName: itemName,
-          description: defaultSpec,
+          description: itemName,
           spec: defaultSpec,
           materials: libOrLibs.materials ? libOrLibs.materials.map((m) => ({ ...m })) : [],
           tags: libOrLibs.tags ? [...libOrLibs.tags] : [],
+          days: resolvedDays,
         }));
         setPickerOpen(false);
       }
@@ -468,9 +525,15 @@ const ItemFormModal = ({
   };
 
   const loadDraftIntoForm = (draft) => {
+    const heading = draft.heading || draft.area || "";
+    const itemName = draft.itemName || draft.description || "";
+
+    prevHeadingRef.current = heading;
+    setPrevItemName(itemName);
+
     rhfReset({
-      heading: draft.heading || draft.area || "",
-      itemName: draft.itemName || draft.description || "",
+      heading: heading,
+      itemName: itemName,
       description: draft.description || "",
       spec: draft.spec || draft.description || "",
       hsn: draft.hsn || "",
@@ -492,6 +555,8 @@ const ItemFormModal = ({
 
   const handleNewDraftClick = () => {
     setSelectedDraftIndex(null);
+    prevHeadingRef.current = "";
+    setPrevItemName("");
     rhfReset({
       heading: "",
       itemName: "",
@@ -527,8 +592,23 @@ const ItemFormModal = ({
       const currentItemName = data.itemName.trim().toLowerCase();
 
       // Check against existing scope items
+      // When editing, exclude the record currently being edited from duplicate check.
+      // Match by id if available, otherwise fall back to matching the original
+      // heading + itemName from the initial prop (covers ProposalMaster scope items
+      // which are identified by index, not id).
+      const initialHeading = (initial?.heading || initial?.area || "").trim().toUpperCase();
+      const initialItemName = (initial?.itemName || initial?.description || "").trim().toLowerCase();
+      const isEditMode = !!(initial && (initial.id || initialItemName));
+
       const isDuplicateInScope = (existingScopeItems || []).some((item) => {
         if (initial && initial.id && item.id === initial.id) return false;
+        // Fallback: exclude the item that matches the original heading + itemName
+        // being edited (only one match is excluded to avoid masking true duplicates)
+        if (isEditMode && !initial.id) {
+          const itemHeading = (item.area || item.heading || "").trim().toUpperCase();
+          const itemName = (item.itemName || "").trim().toLowerCase();
+          if (itemHeading === initialHeading && itemName === initialItemName) return false;
+        }
         return (
           (item.area || item.heading || "").trim().toUpperCase() === currentHeading &&
           (item.itemName || "").trim().toLowerCase() === currentItemName
@@ -558,6 +638,11 @@ const ItemFormModal = ({
         setError("description", { type: "manual", message: "Item Name is required" });
         return false;
       }
+      // Req 3: Item Master requires Room / Category selection before saving
+      if (showCategory && !form.category?.trim()) {
+        setError("description", { type: "manual", message: "Please select a Room / Category before adding the item." });
+        return false;
+      }
     }
     return true;
   };
@@ -574,6 +659,7 @@ const ItemFormModal = ({
       spec: validatedData.spec || "",
       area: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
       isDescriptionCustom,
+      isItemNameCustom: true,
       hsn: validatedData.hsn || "",
       rate: Number(validatedData.rate) || 0,
       gstPercent: Number(form.gstPercent) || 18,
@@ -635,6 +721,7 @@ const ItemFormModal = ({
       spec: validatedData.spec || "",
       area: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
       isDescriptionCustom,
+      isItemNameCustom: true,
       hsn: validatedData.hsn || "",
       rate: Number(validatedData.rate) || 0,
       gstPercent: Number(form.gstPercent) || 18,
@@ -679,13 +766,11 @@ const ItemFormModal = ({
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
     >
       <div
         className={`bg-white rounded-2xl shadow-2xl w-full max-h-[92vh] overflow-hidden flex flex-col transition-all ${
           multiEntryMode ? "max-w-5xl" : "max-w-3xl"
         }`}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
           <div className="flex items-center gap-2">
@@ -705,7 +790,7 @@ const ItemFormModal = ({
             >
               <Pipette size={12} /> Pick from Library
             </button>
-            <button type="button" onClick={onClose} className="text-text-subtle hover:text-textcolor cursor-pointer">
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer">
               <X size={16} />
             </button>
           </div>
@@ -840,6 +925,22 @@ const ItemFormModal = ({
               </>
             ) : (
               <>
+                {showCategory && (
+                  <div>
+                    <Label>Room / Category *</Label>
+                    <CategorySelect
+                      value={form.category}
+                      onChange={(v) => {
+                        const d = getRoomDefaultDays(v);
+                        update({
+                          category: v,
+                          days: d,
+                        });
+                      }}
+                      className={`${inputBase} cursor-pointer`}
+                    />
+                  </div>
+                )}
                 <div>
                   <Label>Item Name *</Label>
                   <InputField
@@ -880,25 +981,7 @@ const ItemFormModal = ({
               </div>
             )}
 
-            <div className={`grid grid-cols-2 sm:grid-cols-${showCategory ? 4 : 3} gap-3`}>
-              {showCategory && (
-                <div>
-                  <Label>Room / Category</Label>
-                  <CategorySelect
-                    value={form.category}
-                    onChange={(v) => {
-                      const d = getRoomDefaultDays(v);
-                      update({
-                        category: v,
-                        ...(form.days === "" || form.days == null
-                          ? { days: d }
-                          : {}),
-                      });
-                    }}
-                    className={`${inputBase} cursor-pointer`}
-                  />
-                </div>
-              )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <Label>HSN Code</Label>
                 <InputField
@@ -1188,11 +1271,9 @@ const LibraryPicker = ({ excludeId, onClose, onPick, multiSelectMode = false }) 
   return (
     <div
       className="fixed inset-0 z-60 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
           <div className="flex items-center gap-2">
@@ -1210,7 +1291,7 @@ const LibraryPicker = ({ excludeId, onClose, onPick, multiSelectMode = false }) 
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-text-subtle hover:text-textcolor cursor-pointer">
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer">
             <X size={16} />
           </button>
         </div>

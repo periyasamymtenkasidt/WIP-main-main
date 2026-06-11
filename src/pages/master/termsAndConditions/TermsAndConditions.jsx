@@ -130,7 +130,7 @@ const ListEditor = ({
         </div>
       </div>
 
-      <div className="p-3 space-y-2 max-h-[400px] overflow-y-auto overscroll-contain scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div className="p-3 space-y-2 max-h-[400px] overflow-y-auto overscroll-contain scroll-smooth scroll-hidden-bar">
         {/* Select All + Add to Default row */}
         {items.length > 0 && !readOnly && (
           <div className="sticky -top-3 bg-white z-10 flex items-center justify-end pb-2 mb-1 border-b border-bordergray/50 -mx-3 px-3 -mt-3">
@@ -391,7 +391,7 @@ const TermsAndConditions = () => {
   };
 
   return (
-    <div className="bg-overallbg font-sans h-full overflow-y-auto pb-28">
+    <div className="bg-overallbg font-sans h-full overflow-y-auto pb-28 scroll-hidden-bar">
       {/* Header Banner */}
       <div className="sticky top-0 z-30 bg-overallbg/80 backdrop-blur-xl border-b border-bordergray/70">
         <div className="px-6 py-4 flex justify-between items-center flex-wrap gap-3">
@@ -555,7 +555,7 @@ const TermsAndConditions = () => {
               <button
                 type="button"
                 onClick={() => setModalState({ isOpen: false, mode: "create", catId: "", inputValue: "", descValue: "", error: "" })}
-                className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-bg-soft"
+                className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -618,8 +618,16 @@ const TermsAndConditions = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs">
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bg-white rounded-2xl border border-bordergray shadow-2xl p-6 mx-4 text-center"
+            className="w-full max-w-sm bg-white rounded-2xl border border-bordergray shadow-2xl p-6 mx-4 text-center relative"
           >
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmState({ isOpen: false, catId: "", catLabel: "" })}
+              className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+              title="Close dialog"
+            >
+              <X size={16} />
+            </button>
             <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-50 text-red-600 mb-4">
               <Trash2 size={20} />
             </div>
