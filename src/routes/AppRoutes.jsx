@@ -11,6 +11,11 @@ import Dashboard from "../pages/dashboard/Dashboard";
 import Signout from "../pages/Signout";
 import NotFound from "../pages/NotFound";
 
+// Client Portal eagerly loaded routes
+import ClientForgotPassword from "../pages/auth/ClientForgotPassword";
+import ClientDashboard from "../pages/clients/ClientDashboard";
+import ClientProtectedRoute from "./ClientProtectedRoute";
+
 // Lazy loaded routes
 const Leads = lazy(() => import("../pages/leads/Leads"));
 const LeadEdit = lazy(() => import("../pages/leads/LeadEdit"));
@@ -24,6 +29,8 @@ const Support = lazy(() => import("../pages/Support"));
 const Deals = lazy(() => import("../pages/deals/Deals"));
 const Projects = lazy(() => import("../pages/projects/Projects"));
 const ProjectDetail = lazy(() => import("../pages/projects/ProjectDetail"));
+const Sites = lazy(() => import("../pages/sites/Sites"));
+const SiteDetail = lazy(() => import("../pages/sites/SiteDetail"));
 const Master=lazy(()=>import("../pages/master/Master"));
 const ProposalMaster=lazy(()=>import("../pages/master/proposalMaster/ProposalMaster"));
 const ItemLibrary=lazy(()=>import("../pages/master/itemMaster/ItemLibrary"));
@@ -45,6 +52,16 @@ const AppRoutes = () => {
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          
+          {/* Client Portal Public Routes */}
+          <Route path="/client/login" element={<Login />} />
+          <Route path="/client/forgot-password" element={<ClientForgotPassword />} />
+
+          {/* Client Portal Private Routes */}
+          <Route element={<ClientProtectedRoute />}>
+            <Route path="/client/dashboard" element={<ClientDashboard />} />
+          </Route>
+
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
@@ -59,6 +76,10 @@ const AppRoutes = () => {
               <Route path="projects">
                 <Route index element={<Projects />} />
                 <Route path=":id" element={<ProjectDetail />} />
+              </Route>
+              <Route path="sitevisit">
+                <Route index element={<Sites />} />
+                <Route path=":id" element={<SiteDetail />} />
               </Route>
               <Route path="boq">
                 <Route index element={<BOQList />} />

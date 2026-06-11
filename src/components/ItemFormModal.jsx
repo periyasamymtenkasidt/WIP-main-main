@@ -33,6 +33,7 @@ import DestinationPromptModal from "./DestinationPromptModal";
 import EditableHeadingDropdown from "./EditableHeadingDropdown";
 import FilteredItemNameDropdown from "./FilteredItemNameDropdown";
 import DuplicateScopeWarningModal from "./DuplicateScopeWarningModal";
+import SearchableSelect from "./SearchableSelect";
 
 const itemFormSchema = yup.object().shape({
   heading: yup.string().trim(),
@@ -914,27 +915,23 @@ const ItemFormModal = ({
               </div>
               <div>
                 <Label>Unit</Label>
-                <select
+                <SearchableSelect
                   value={form.unit}
-                  onChange={(e) => update({ unit: e.target.value })}
+                  onChange={(val) => update({ unit: val })}
+                  options={UNITS}
                   className={`${inputBase} cursor-pointer`}
-                >
-                  {UNITS.map((u) => (
-                    <option key={u.code} value={u.code}>{u.label}</option>
-                  ))}
-                </select>
+                  placeholder="Select unit…"
+                />
               </div>
               <div>
                 <Label>GST %</Label>
-                <select
+                <SearchableSelect
                   value={form.gstPercent}
-                  onChange={(e) => update({ gstPercent: Number(e.target.value) })}
+                  onChange={(val) => update({ gstPercent: Number(val) })}
+                  options={GST_OPTIONS.map((g) => ({ value: g, label: `${g}%` }))}
                   className={`${inputBase} cursor-pointer`}
-                >
-                  {GST_OPTIONS.map((g) => (
-                    <option key={g} value={g}>{g}%</option>
-                  ))}
-                </select>
+                  placeholder="Select GST %…"
+                />
               </div>
             </div>
 

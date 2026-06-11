@@ -170,17 +170,53 @@ const buildAllProjects = () => {
   ];
 
   const today = new Date();
-  return merged
+  let needsStorageUpdate = false;
+  const updatedNewClients = [...newClients];
+  const staticOverrides = JSON.parse(localStorage.getItem("staticClientStatusOverrides") || "{}");
+  let needsOverridesUpdate = false;
+
+  const result = merged
     .map((rawClient) => {
-      const override = getStaticOverride(rawClient.clientID);
-      const client = override
+      const override = staticOverrides[rawClient.clientID];
+      let client = override
         ? { ...rawClient, paymentStatus: override }
         : rawClient;
       // Skip "failed" projects from the kanban
       if (client.paymentStatus === "failed") return null;
 
       const milestones = buildMilestones(client);
-      const currentStageIdx = milestones.findIndex((m) => m.status !== "paid");
+      const isAllPaid = milestones.length === 4 && milestones.every((m) => m.status === "paid");
+
+      // Verify payment status matches milestones
+      let expectedStatus = client.paymentStatus;
+      if (isAllPaid) {
+        expectedStatus = "completed";
+      } else {
+        if (client.paymentStatus === "completed") {
+          expectedStatus = "pending";
+        }
+      }
+
+      if (client.paymentStatus !== expectedStatus) {
+        client = { ...client, paymentStatus: expectedStatus };
+        // Sync back to storage
+        const idx = updatedNewClients.findIndex((c) => c.clientID === client.clientID);
+        if (idx >= 0) {
+          updatedNewClients[idx] = client;
+          needsStorageUpdate = true;
+        } else {
+          const isStatic = ClientTableData.some((c) => c.clientID === client.clientID);
+          if (isStatic) {
+            staticOverrides[client.clientID] = expectedStatus;
+            needsOverridesUpdate = true;
+          } else {
+            updatedNewClients.push(client);
+            needsStorageUpdate = true;
+          }
+        }
+      }
+
+      const currentStageIdx = isAllPaid ? -1 : milestones.findIndex((m) => m.status !== "paid");
       const projectValue = client.projectValue || parseBudget(client.budget);
 
       // Days in current stage
@@ -201,6 +237,15 @@ const buildAllProjects = () => {
       return { client, milestones, currentStageIdx, projectValue, daysInStage };
     })
     .filter(Boolean);
+
+  if (needsStorageUpdate) {
+    localStorage.setItem("newClientsData", JSON.stringify(updatedNewClients));
+  }
+  if (needsOverridesUpdate) {
+    localStorage.setItem("staticClientStatusOverrides", JSON.stringify(staticOverrides));
+  }
+
+  return result;
 };
 
 const urgencyOf = (days) => {
@@ -559,7 +604,7 @@ const ConfirmPaidModal = ({ project, stage, onClose, onConfirm }) => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wider text-text-subtle">
-            Stage {stage.idx + 1} of 5
+            Stage {stage.idx + 1} of 4
           </p>
           <p className="text-[14px] font-bold text-text">{stage.name}</p>
         </div>
@@ -634,6 +679,8 @@ export default function Deals() {
     localStorage.setItem(milestoneKey(clientID), JSON.stringify(updated));
     if (updated.every((m) => m.status === "paid")) {
       updatePaymentStatus(clientID, "completed");
+    } else {
+      updatePaymentStatus(clientID, "pending");
     }
     setTick((t) => t + 1);
     window.dispatchEvent(new Event("leadDataChanged"));
@@ -658,7 +705,7 @@ export default function Deals() {
         .col-scroll::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="bg-overallbg min-h-screen p-1.5 font-manrope">
+      <div className="bg-overallbg h-full overflow-y-auto p-4 font-manrope">
         {/* Page header */}
         <div className="flex justify-between items-start mb-5">
           <div>

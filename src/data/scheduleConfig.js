@@ -31,32 +31,6 @@ export const DEFAULT_CONFIG = {
     { name: "Pooja Room", days: 4 },
     { name: "Study", days: 8 },
   ],
-  // Headings — destination headings for Proposal Master scope assignment.
-  // Each heading belongs to a parent room/category. Proposal Master consumes
-  // these as the single source of truth; it never modifies Schedule Master.
-  headings: [
-    { name: "Kitchen", category: "Kitchen" },
-    { name: "Kitchen - Utility Area", category: "Kitchen" },
-    { name: "Kitchen - Island Area", category: "Kitchen" },
-    { name: "Living Room", category: "Living Room" },
-    { name: "Living Room - TV Wall", category: "Living Room" },
-    { name: "Living Room - Near Dining", category: "Living Room" },
-    { name: "Dining", category: "Dining" },
-    { name: "Master Bedroom", category: "Master Bedroom" },
-    { name: "Master Bedroom - Wardrobe Wall", category: "Master Bedroom" },
-    { name: "Bedroom 2", category: "Bedroom 2" },
-    { name: "Bedroom 3", category: "Bedroom 3" },
-    { name: "Bathrooms", category: "Bathrooms" },
-    { name: "Bathrooms - Master Bath", category: "Bathrooms" },
-    { name: "Bathrooms - Common Bath", category: "Bathrooms" },
-    { name: "Bathrooms - Guest Bath", category: "Bathrooms" },
-    { name: "Foyer", category: "Foyer" },
-    { name: "Utility", category: "Utility" },
-    { name: "Staircase", category: "Staircase" },
-    { name: "Balcony", category: "Balcony" },
-    { name: "Pooja Room", category: "Pooja Room" },
-    { name: "Study", category: "Study" },
-  ],
   // Task status options.
   statuses: ["Not Started", "In Progress", "Done", "Blocked"],
 };
@@ -74,27 +48,6 @@ function normalizeRooms(rooms) {
     .filter((r) => r.name);
 }
 
-// Coerce headings to [{ name, category }] — auto-seeds from rooms if headings
-// array is missing (backward compat with configs saved before headings existed).
-function normalizeHeadings(headings, rooms) {
-  if (Array.isArray(headings) && headings.length > 0) {
-    return headings
-      .map((h) =>
-        typeof h === "string"
-          ? { name: h.trim(), category: h.trim() }
-          : { name: (h?.name || "").trim(), category: (h?.category || h?.name || "").trim() },
-      )
-      .filter((h) => h.name);
-  }
-  // Auto-seed from rooms — each room becomes a base heading
-  if (Array.isArray(rooms)) {
-    return rooms
-      .filter((r) => (r.name || "").trim())
-      .map((r) => ({ name: r.name.trim(), category: r.name.trim() }));
-  }
-  return DEFAULT_CONFIG.headings;
-}
-
 export function getScheduleConfig() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -102,7 +55,6 @@ export function getScheduleConfig() {
     // Merge over defaults so a partial/old saved blob never drops keys.
     const merged = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
     merged.rooms = normalizeRooms(merged.rooms);
-    merged.headings = normalizeHeadings(merged.headings, merged.rooms);
     return merged;
   } catch {
     return DEFAULT_CONFIG;
@@ -110,7 +62,10 @@ export function getScheduleConfig() {
 }
 
 export function saveScheduleConfig(config) {
-  localStorage.setItem(KEY, JSON.stringify(config));
+  // Strip headings array from being persisted to database
+  const rest = { ...config };
+  delete rest.headings;
+  localStorage.setItem(KEY, JSON.stringify(rest));
   window.dispatchEvent(new Event("scheduleConfigChanged"));
 }
 
@@ -150,11 +105,18 @@ export function getEscalationRole(daysOverdue, config = getScheduleConfig()) {
 
 // Get all headings, optionally filtered by category name. Case-insensitive
 // matching on category. Returns [{ name, category }].
+// Mapped solely from Room / Category Presets (rooms).
 export function getScheduleHeadings(category = null, config = getScheduleConfig()) {
-  const headings = config.headings || [];
-  if (!category) return headings;
+  const rooms = config.rooms || [];
+  if (!category) {
+    return rooms.map((r) => ({ name: r.name, category: r.name }));
+  }
   const cat = category.trim().toUpperCase();
-  return headings.filter((h) => (h.category || "").trim().toUpperCase() === cat);
+  const matched = rooms.filter((r) => r.name.trim().toUpperCase() === cat);
+  if (matched.length > 0) {
+    return matched.map((r) => ({ name: r.name, category: r.name }));
+  }
+  return [{ name: category.trim(), category: category.trim() }];
 }
 
 // Extract the parent category from a heading name. Uses the rooms list as
@@ -172,32 +134,25 @@ export function getCategoryFromHeading(headingName, config = getScheduleConfig()
       return room;
     }
   }
-  // Check headings list for an exact match and return its category
-  const heading = (config.headings || []).find(
-    (h) => h.name.trim().toUpperCase() === upper,
-  );
-  if (heading) return heading.category || heading.name;
   return headingName.trim();
 }
 
-// Append a new heading to the Schedule Master config. No-op if the name
-// already exists (case-insensitive). Returns the updated headings array.
-// The `category` is inferred from the heading name if not provided.
-export function addScheduleHeading(name, category = null) {
-  const trimmed = (name || "").trim();
-  if (!trimmed) return getScheduleConfig().headings || [];
-  const cfg = getScheduleConfig();
-  const headings = cfg.headings || [];
-  if (headings.some((h) => h.name.trim().toUpperCase() === trimmed.toUpperCase())) {
-    return headings;
-  }
-  const resolvedCategory = category || getCategoryFromHeading(trimmed, cfg);
-  const updated = [...headings, { name: trimmed, category: resolvedCategory }];
-  saveScheduleConfig({ ...cfg, headings: updated });
-  return updated;
+// No-op for heading creation, to maintain signature compatibility.
+export function addScheduleHeading(_name, _category = null) {
+  return [];
 }
 
 // Get all room/category names (used as parent categories for heading grouping).
+// This is the SINGLE SOURCE OF TRUTH for heading values — all headings must
+// map back to one of these room/category presets.
 export function getRoomCategories(config = getScheduleConfig()) {
   return (config.rooms || []).map((r) => r.name.trim()).filter(Boolean);
+}
+
+// Get room/category presets as heading options (rooms as the single source).
+// Returns [{ name, days }] — directly from Schedule Master rooms.
+export function getRoomCategoryPresets(config = getScheduleConfig()) {
+  return (config.rooms || [])
+    .map((r) => ({ name: (r.name || "").trim(), days: r.days ?? "" }))
+    .filter((r) => r.name);
 }

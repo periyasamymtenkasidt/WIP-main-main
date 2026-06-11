@@ -180,10 +180,7 @@ const ProjectSchedule = ({ lead }) => {
 
   const setRooms = (rooms) => persist({ ...schedule, rooms });
 
-  const anchor = useMemo(
-    () => resolveAnchor(lead, schedule),
-    [lead, schedule],
-  );
+  const anchor = useMemo(() => resolveAnchor(lead, schedule), [lead, schedule]);
   // Work is "started" only once the Booking Token is paid — before that we don't
   // surface progress or overdue (project isn't Won/booked yet).
   const started = anchor.source === "booking";
@@ -213,6 +210,10 @@ const ProjectSchedule = ({ lead }) => {
       : "";
   const [draftStart, setDraftStart] = useState(schedule.workStart || "");
   const [draftNote, setDraftNote] = useState(schedule.delayNote || "");
+  // 7-day post-payment delay attribution — "client" or "our".
+  const [delayAttributionDraft, setDelayAttributionDraft] = useState(
+    schedule.delayAttribution || "",
+  );
   // Two-sided confirmation: client approval + (when breaching) the delay
   // attribution — "client" (client requested) or "our" (our delay).
   const [clientApprovedDraft, setClientApprovedDraft] = useState(
@@ -235,6 +236,7 @@ const ProjectSchedule = ({ lead }) => {
       : 0;
   const draftNeedsNote = draftDelay > 7;
   const draftNoteMissing = draftNeedsNote && !draftNote.trim();
+  const draftAttributionMissing = draftNeedsNote && !delayAttributionDraft;
 
   // Possession breach: does the plan (for this draft start) finish past handover?
   const possession = getPossessionDate(lead);
@@ -261,12 +263,14 @@ const ProjectSchedule = ({ lead }) => {
     !locked &&
     (effectiveDraftStart !== (schedule.workStart || bookingISO) ||
       draftNote !== (schedule.delayNote || "") ||
+      delayAttributionDraft !== (schedule.delayAttribution || "") ||
       clientApprovedDraft !== !!schedule.clientApproved ||
       breachReasonDraft !== (schedule.breachReason || ""));
   const canConfirm =
     started &&
     !locked && // can't re-confirm once locked
     !draftNoteMissing &&
+    (!draftAttributionMissing || draftBreach) && // 7-day attribution not needed when possession breach is active
     clientApprovedDraft && // client must sign off on the date
     (!draftBreach || !!breachReasonDraft) && // breach needs an attributed reason
     (startDirty || !schedule.workStart);
@@ -274,12 +278,14 @@ const ProjectSchedule = ({ lead }) => {
   const confirmStart = () => {
     if (!canConfirm) return;
     const note = draftNeedsNote ? draftNote.trim() : "";
+    const attribution = draftNeedsNote ? delayAttributionDraft : "";
     const reason = draftBreach ? breachReasonDraft : "";
     const at = new Date().toISOString();
     persist({
       ...schedule,
       workStart: effectiveDraftStart,
       delayNote: note,
+      delayAttribution: attribution,
       clientApproved: clientApprovedDraft,
       breachReason: reason,
       confirmedAt: at, // locks the start
@@ -291,6 +297,7 @@ const ProjectSchedule = ({ lead }) => {
       startDate: effectiveDraftStart,
       delayDays: draftDelay,
       note,
+      delayAttribution: attribution,
       clientApproved: clientApprovedDraft,
       breachDays: draftBreach ? draftBreachDays : 0,
       reason,
@@ -342,6 +349,7 @@ const ProjectSchedule = ({ lead }) => {
       ...schedule,
       confirmedAt: "",
       clientApproved: false,
+      delayAttribution: "",
       breachReason: "",
     });
     appendActivity(lead.proposalId, {
@@ -351,6 +359,7 @@ const ProjectSchedule = ({ lead }) => {
       note: amendReason.trim(),
     });
     setClientApprovedDraft(false); // force re-approval
+    setDelayAttributionDraft(""); // force re-attribution
     setBreachReasonDraft("");
     setAmendOpen(false);
     setAmendReason("");
@@ -384,7 +393,7 @@ const ProjectSchedule = ({ lead }) => {
   };
 
   return (
-    <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] overflow-hidden shrink-0">
       {/* Header */}
       <div className="px-6 pt-5 pb-3 flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -395,7 +404,10 @@ const ProjectSchedule = ({ lead }) => {
             All rooms run in parallel from the start
             {projectEnd && (
               <span className="ml-1">
-                · plan ends <span className="font-semibold text-darkgray">{fmt(projectEnd)}</span>
+                · plan ends{" "}
+                <span className="font-semibold text-darkgray">
+                  {fmt(projectEnd)}
+                </span>
               </span>
             )}
             {overdue > 0 && (
@@ -412,17 +424,15 @@ const ProjectSchedule = ({ lead }) => {
         {anchor.source === "booking" ? (
           <div
             className={`rounded-xl border px-3.5 py-2.5 ${
-              draftBreach
+              draftBreach || draftNeedsNote
                 ? "bg-red-50 border-red-200"
-                : draftNeedsNote
-                  ? "bg-amber-50 border-amber-200"
-                  : "bg-emerald-50 border-emerald-100"
+                : "bg-emerald-50 border-emerald-100"
             }`}
           >
             <div className="flex items-center gap-2 flex-wrap">
               <FiCheckCircle
                 size={15}
-                className={`shrink-0 ${draftBreach ? "text-red-600" : draftNeedsNote ? "text-amber-600" : "text-emerald-600"}`}
+                className={`shrink-0 ${draftBreach || draftNeedsNote ? "text-red-600" : "text-emerald-600"}`}
               />
               <p className="text-[12px] text-emerald-800">
                 Booking Token paid{" "}
@@ -453,10 +463,13 @@ const ProjectSchedule = ({ lead }) => {
               </button>
             </div>
 
+            {/* Section 1 – Delay Information Message */}
             {draftDelay > 0 && (
               <p
                 className={`text-[11.5px] mt-1.5 ${
-                  draftNeedsNote ? "text-amber-700 font-semibold" : "text-emerald-700"
+                  draftNeedsNote
+                    ? "text-red-700 font-semibold"
+                    : "text-emerald-700"
                 }`}
               >
                 Work starts {fmt(draftStartDate)} — {draftDelay} day
@@ -467,6 +480,7 @@ const ProjectSchedule = ({ lead }) => {
               </p>
             )}
 
+            {/* Section 2 – Delay Reason Text Area */}
             {draftNeedsNote && (
               <div className="mt-2">
                 <textarea
@@ -482,8 +496,65 @@ const ProjectSchedule = ({ lead }) => {
                 />
                 {draftNoteMissing && (
                   <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1">
-                    <FiAlertTriangle size={11} /> Add a reason before confirming.
+                    <FiAlertTriangle size={11} /> Add a reason before
+                    confirming.
                   </p>
+                )}
+              </div>
+            )}
+
+            {/* Section 3 – Delay Attribution Warning Card (hidden when possession-date breach is active) */}
+            {draftNeedsNote && !draftBreach && (
+              <div className="mt-2 rounded-lg bg-white/60 border border-red-200 px-3 py-2">
+                <p className="text-[11.5px] text-red-700 font-semibold flex items-center gap-1.5">
+                  <FiAlertTriangle size={12} className="shrink-0" />
+                  Work has not started within 7 days of receiving the advance
+                  payment.
+                </p>
+                {locked ? (
+                  <p className="text-[11px] text-red-700 mt-1">
+                    Delay attributed to:{" "}
+                    <span className="font-semibold">
+                      {schedule.delayAttribution === "client"
+                        ? "Client requested this date"
+                        : "Our Delay"}
+                    </span>{" "}
+                    · client informed.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-red-700 mt-1.5 mb-1">
+                      Whose delay is this? (confirming will inform the client)
+                    </p>
+                    <div className="flex items-center gap-4 text-[11px] text-red-700">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="delayAttribution"
+                          checked={delayAttributionDraft === "client"}
+                          onChange={() => setDelayAttributionDraft("client")}
+                          className="accent-red-600"
+                        />
+                        Client requested this date
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="delayAttribution"
+                          checked={delayAttributionDraft === "our"}
+                          onChange={() => setDelayAttributionDraft("our")}
+                          className="accent-red-600"
+                        />
+                        Our Delay
+                      </label>
+                    </div>
+                    {draftAttributionMissing && (
+                      <p className="text-[11px] text-red-600 mt-1.5 flex items-center gap-1">
+                        <FiAlertTriangle size={11} /> Select who caused the
+                        delay before confirming.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -620,74 +691,76 @@ const ProjectSchedule = ({ lead }) => {
               </div>
             )}
 
-            {/* Client notification for a possession breach */}
-            {currentBreach && (
-              <div className="mt-2 border-t border-red-200 pt-2">
-                {!notifyOpen ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNotifyMsg(
-                        `Heads up: projected completion is ${fmt(projectEnd)}, which is ${currentBreachDays} day${currentBreachDays === 1 ? "" : "s"} past the agreed possession date (${fmt(possession)}).`,
-                      );
-                      setNotifyOpen(true);
-                    }}
-                    className="text-[11px] font-semibold text-red-600 hover:underline flex items-center gap-1"
-                  >
-                    <FiAlertTriangle size={11} /> Notify client of timeline
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3 text-[11px]">
-                      <span className="text-text-muted">Reason:</span>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="notifyReason"
-                          checked={notifyReason === "client"}
-                          onChange={() => setNotifyReason("client")}
-                          className="accent-select-blue"
-                        />
-                        Client-requested
-                      </label>
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="notifyReason"
-                          checked={notifyReason === "execution"}
-                          onChange={() => setNotifyReason("execution")}
-                          className="accent-select-blue"
-                        />
-                        Execution delay
-                      </label>
-                    </div>
-                    <textarea
-                      value={notifyMsg}
-                      onChange={(e) => setNotifyMsg(e.target.value)}
-                      rows={2}
-                      className="w-full rounded-lg border border-bordergray px-3 py-2 text-[12px] text-textcolor resize-none focus:outline-none focus:border-select-blue"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setNotifyOpen(false)}
-                        className="px-3 py-1.5 text-[11px] font-semibold text-grey hover:bg-bg-soft rounded-lg"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={sendNotification}
-                        disabled={!notifyMsg.trim()}
-                        className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Log notification
-                      </button>
-                    </div>
+            {/* Client notification */}
+            <div className="mt-2 border-t border-red-200 pt-2">
+              {!notifyOpen ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const baseMsg = projectEnd
+                      ? `Heads up: projected completion is ${fmt(projectEnd)}`
+                      : "Heads up: schedule update";
+                    const breachMsg = currentBreach
+                      ? `, which is ${currentBreachDays} day${currentBreachDays === 1 ? "" : "s"} past the agreed possession date (${fmt(possession)}).`
+                      : ".";
+                    setNotifyMsg(`${baseMsg}${breachMsg}`);
+                    setNotifyOpen(true);
+                  }}
+                  className="text-[11px] font-semibold text-red-600 hover:underline flex items-center gap-1"
+                >
+                  <FiAlertTriangle size={11} /> Notify client of timeline
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="text-text-muted">Reason:</span>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="notifyReason"
+                        checked={notifyReason === "client"}
+                        onChange={() => setNotifyReason("client")}
+                        className="accent-select-blue"
+                      />
+                      Client-requested
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="notifyReason"
+                        checked={notifyReason === "execution"}
+                        onChange={() => setNotifyReason("execution")}
+                        className="accent-select-blue"
+                      />
+                      Execution delay
+                    </label>
                   </div>
-                )}
-              </div>
-            )}
+                  <textarea
+                    value={notifyMsg}
+                    onChange={(e) => setNotifyMsg(e.target.value)}
+                    rows={2}
+                    className="w-full rounded-lg border border-bordergray px-3 py-2 text-[12px] text-textcolor resize-none focus:outline-none focus:border-select-blue"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNotifyOpen(false)}
+                      className="px-3 py-1.5 text-[11px] font-semibold text-grey hover:bg-bg-soft rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={sendNotification}
+                      disabled={!notifyMsg.trim()}
+                      className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Log notification
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-3 bg-bg-soft border border-bordergray rounded-xl px-3.5 py-2.5 flex-wrap">
@@ -697,7 +770,9 @@ const ProjectSchedule = ({ lead }) => {
             <input
               type="date"
               value={schedule.workStart}
-              onChange={(e) => persist({ ...schedule, workStart: e.target.value })}
+              onChange={(e) =>
+                persist({ ...schedule, workStart: e.target.value })
+              }
               className="rounded-lg border border-bordergray px-2.5 py-1.5 text-[12px] text-textcolor focus:outline-none focus:border-select-blue"
             />
             <span className="text-[11px] text-text-subtle">

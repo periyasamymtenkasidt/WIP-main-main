@@ -53,7 +53,9 @@ const Header = () => {
         <div
           ref={searchRef}
           className={`flex items-center bg-bg-soft rounded-full overflow-hidden transition-all duration-300 ease-in-out ${
-            showSearch ? "w-40 sm:w-60" : "pl-2 w-7.5 items-center justify-center"
+            showSearch
+              ? "w-40 sm:w-60"
+              : "pl-2 w-7.5 items-center justify-center"
           }`}
         >
           <TbSearch
@@ -86,7 +88,11 @@ const Header = () => {
           <p className="text-xs text-text-muted">Managing Partner</p>
         </div>
 
-        <img src={avatar} alt="avatar" className="h-9 w-9 sm:h-10 sm:w-10 cursor-pointer" />
+        <img
+          src={avatar}
+          alt="avatar"
+          className="h-9 w-9 sm:h-10 sm:w-10 cursor-pointer"
+        />
       </div>
     </div>
   );

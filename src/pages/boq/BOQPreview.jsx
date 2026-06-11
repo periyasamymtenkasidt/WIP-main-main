@@ -11,7 +11,11 @@ import {
   Calendar,
   Building2,
 } from "lucide-react";
-import { computeBoqTotals, computeItemAmount, computeItemQty } from "../../data/boqStorage";
+import {
+  computeBoqTotals,
+  computeItemAmount,
+  computeItemQty,
+} from "../../data/boqStorage";
 import { UNITS } from "../../data/boqUnits";
 import { inrToWords } from "../../utils/numberToWords";
 import { formatSizeRange } from "../../utils/sizeRangeValidation";
@@ -27,8 +31,7 @@ const COMPANY = {
   gstin: "29AAAAA0000A1Z5",
 };
 
-const unitLabelOf = (code) =>
-  UNITS.find((u) => u.code === code)?.label || code;
+const unitLabelOf = (code) => UNITS.find((u) => u.code === code)?.label || code;
 
 const formatINR = (n) =>
   `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
@@ -99,10 +102,10 @@ const BOQPreview = ({ boq, onClose }) => {
             <button
               type="button"
               onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-bordergray bg-white text-text-muted hover:text-textcolor"
+              className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
               title="Close preview"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -188,7 +191,10 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
           )}
           {boq.client?.gstin && (
             <p className="text-[10.5px] text-text-muted mt-1">
-              GSTIN: <span className="font-semibold text-textcolor">{boq.client.gstin}</span>
+              GSTIN:{" "}
+              <span className="font-semibold text-textcolor">
+                {boq.client.gstin}
+              </span>
             </p>
           )}
         </div>
@@ -212,7 +218,10 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
           )}
           {boq.project?.sizeRange && (
             <p className="text-[10.5px] text-text-muted mt-0.5">
-              Size: <span className="font-semibold text-textcolor">{formatSizeRange(boq.project.sizeRange)}</span>
+              Size:{" "}
+              <span className="font-semibold text-textcolor">
+                {formatSizeRange(boq.project.sizeRange)}
+              </span>
             </p>
           )}
           {boq.validity && (
@@ -365,11 +374,7 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
               />
             </div>
           ))}
-          <Row
-            label="GRAND TOTAL"
-            value={formatINR(totals.grandTotal)}
-            bold
-          />
+          <Row label="GRAND TOTAL" value={formatINR(totals.grandTotal)} bold />
         </div>
       </div>
 
@@ -424,19 +429,17 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
           {(boq.inclusions || []).filter(Boolean).length > 0 && (
             <div>
               <p className="text-[11px] font-bold text-textcolor mb-1 border-b-2 border-emerald-500 pb-1">
-              Included
+                Included
               </p>
               <ul className="text-[10.5px] text-text-muted space-y-0.5 mt-1.5 leading-snug">
-                {(boq.inclusions || [])
-                  .filter(Boolean)
-                  .map((it, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5">
-                      <span className="inline-flex shrink-0 h-3.5 w-3.5 rounded-full bg-emerald-100 text-emerald-700 items-center justify-center mt-0.5">
-                        <Check size={8} strokeWidth={3} />
-                      </span>
-                      <span className="flex-1 text-textcolor">{it}</span>
-                    </li>
-                  ))}
+                {(boq.inclusions || []).filter(Boolean).map((it, idx) => (
+                  <li key={idx} className="flex items-start gap-1.5">
+                    <span className="inline-flex shrink-0 h-3.5 w-3.5 rounded-full bg-emerald-100 text-emerald-700 items-center justify-center mt-0.5">
+                      <Check size={8} strokeWidth={3} />
+                    </span>
+                    <span className="flex-1 text-textcolor">{it}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -446,16 +449,14 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
                 Not Included
               </p>
               <ul className="text-[10.5px] text-text-muted space-y-0.5 mt-1.5 leading-snug">
-                {(boq.exclusions || [])
-                  .filter(Boolean)
-                  .map((it, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5">
-                      <span className="inline-flex shrink-0 h-3.5 w-3.5 rounded-full bg-red-100 text-red-600 items-center justify-center mt-0.5">
-                        <X size={8} strokeWidth={3} />
-                      </span>
-                      <span className="flex-1 text-textcolor">{it}</span>
-                    </li>
-                  ))}
+                {(boq.exclusions || []).filter(Boolean).map((it, idx) => (
+                  <li key={idx} className="flex items-start gap-1.5">
+                    <span className="inline-flex shrink-0 h-3.5 w-3.5 rounded-full bg-red-100 text-red-600 items-center justify-center mt-0.5">
+                      <X size={8} strokeWidth={3} />
+                    </span>
+                    <span className="flex-1 text-textcolor">{it}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -480,11 +481,23 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
         </p>
         <ul className="text-[10px] text-text-muted space-y-0.5 list-disc list-inside leading-snug">
           <li>Quotation valid for {boq.validity || "30 days from issue"}.</li>
-          <li>All rates are inclusive of material, labour, and installation unless otherwise specified.</li>
+          <li>
+            All rates are inclusive of material, labour, and installation unless
+            otherwise specified.
+          </li>
           <li>GST as applicable, payable by the client at prevailing rates.</li>
-          <li>Variations / change orders will be billed separately as per agreed rates.</li>
-          <li>Civil work, electrical rough-in, and plumbing are excluded unless explicitly listed.</li>
-          <li>Project timelines commence on receipt of advance and approved drawings.</li>
+          <li>
+            Variations / change orders will be billed separately as per agreed
+            rates.
+          </li>
+          <li>
+            Civil work, electrical rough-in, and plumbing are excluded unless
+            explicitly listed.
+          </li>
+          <li>
+            Project timelines commence on receipt of advance and approved
+            drawings.
+          </li>
         </ul>
       </div>
 
@@ -524,7 +537,8 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
           {COMPANY.name} · {COMPANY.email} · {COMPANY.phone}
         </p>
         <p className="text-[9px] text-text-subtle mt-0.5">
-          This is a computer-generated document. {boq.id} · Rev {boq.revision || 1}
+          This is a computer-generated document. {boq.id} · Rev{" "}
+          {boq.revision || 1}
         </p>
       </div>
     </div>
@@ -534,7 +548,11 @@ const BOQDocument = ({ boq, totals, gstSplits }) => {
 const Row = ({ label, value, bold, subtle }) => (
   <div
     className={`flex items-center justify-between px-3 py-1.5 border-b border-bordergray last:border-b-0 ${
-      bold ? "bg-select-blue text-white" : subtle ? "text-text-muted" : "text-textcolor"
+      bold
+        ? "bg-select-blue text-white"
+        : subtle
+          ? "text-text-muted"
+          : "text-textcolor"
     }`}
   >
     <span
@@ -542,9 +560,7 @@ const Row = ({ label, value, bold, subtle }) => (
     >
       {label}
     </span>
-    <span
-      className={`text-[11.5px] tabular-nums ${bold ? "font-bold" : ""}`}
-    >
+    <span className={`text-[11.5px] tabular-nums ${bold ? "font-bold" : ""}`}>
       {value}
     </span>
   </div>

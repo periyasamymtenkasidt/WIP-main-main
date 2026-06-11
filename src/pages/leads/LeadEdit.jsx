@@ -49,7 +49,10 @@ import {
   FiTrendingUp,
   FiAward,
   FiEdit3,
+  FiX,
 } from "react-icons/fi";
+import { FaWhatsapp } from "react-icons/fa6";
+import { getOrSeedSchedule, saveSchedule } from "../../data/scheduleStorage";
 
 const LostReasonModal = ({ onClose, onConfirm }) => {
   const [reason, setReason] = useState("");
@@ -58,7 +61,15 @@ const LostReasonModal = ({ onClose, onConfirm }) => {
 
   return (
     <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-      <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[460px] mx-auto p-6">
+      <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[460px] mx-auto p-6 relative">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+          title="Close dialog"
+        >
+          <FiX size={16} />
+        </button>
         <div className="flex items-start gap-3 mb-5">
           <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
             <FiXCircle size={22} />
@@ -518,6 +529,10 @@ const LeadEdit = () => {
       JSON.stringify([newClient, ...newClients]),
     );
 
+    // Seed and save the project schedule immediately
+    const schedule = getOrSeedSchedule(lead);
+    saveSchedule(lead.proposalId, schedule);
+
     const milestones = PAYMENT_MILESTONES.map((m) => {
       const base = Math.round((numericValue * m.pct) / 100);
       const gstAmt = Math.round((base * m.gst) / 100);
@@ -588,9 +603,9 @@ const LeadEdit = () => {
     ["inquiry", "qualified"].includes(lead?.status?.toLowerCase());
 
   return (
-    <div className="bg-overallbg p-6 font-sans h-full overflow-y-scroll">
+    <div className="bg-overallbg p-6 font-sans h-full flex flex-col overflow-y-auto lg:overflow-hidden scroll-hidden-bar">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -751,9 +766,9 @@ const LeadEdit = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 w-full items-start">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 w-full lg:items-stretch lg:overflow-hidden min-h-0">
         {/* Left Column (Main Content) */}
-        <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0">
+        <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
           {/* Card 1: Main Info & Stepper */}
           <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)]">
             <div className="flex justify-between items-start">
@@ -890,6 +905,26 @@ const LeadEdit = () => {
                   <p className="text-[12px] text-gray-500 mt-0.5">
                     Resume when the client is ready to move forward.
                   </p>
+                </div>
+              </div>
+            )}
+            {lead.status?.toLowerCase() === "negotiation" && lead.negotiationNote && (
+              <div className="mt-12 flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4">
+                <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <FiTrendingUp size={18} />
+                </div>
+                <div>
+                  <p className="text-[13px] font-bold text-amber-800">
+                    Active Blocker / Negotiation Details
+                  </p>
+                  <p className="text-[12px] text-amber-700 mt-0.5">
+                    Reason / Remarks: {lead.negotiationNote}
+                  </p>
+                  {lead.expectedClose && (
+                    <p className="text-[11px] text-amber-600 mt-1">
+                      Expected Close Date: {lead.expectedClose}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1059,7 +1094,7 @@ const LeadEdit = () => {
         </div>
 
         {/* Right Column (Sidebar) */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0">
+        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
           {/* Profile Card */}
           <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] flex flex-col items-center text-center">
             <div className="relative mb-5">
@@ -1084,7 +1119,7 @@ const LeadEdit = () => {
             </button>
             <div className="w-full flex gap-3">
               <button className="flex-1 py-3 bg-palewhite hover:bg-bg-soft text-grey rounded-[14px] text-[13px] font-bold flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-gray-200">
-                <FiMessageCircle size={16} /> WhatsApp
+                <FaWhatsapp size={16} /> WhatsApp
               </button>
               <button className="flex-1 py-3 bg-palewhite hover:bg-bg-soft text-grey rounded-[14px] text-[13px] font-bold flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-gray-200">
                 <FiMail size={16} /> Email
@@ -1282,6 +1317,8 @@ const LeadEdit = () => {
       {showNegotiationModal && (
         <NegotiationModal
           onClose={() => setShowNegotiationModal(false)}
+          initialNote={lead.negotiationNote}
+          initialExpectedClose={lead.expectedClose}
           onConfirm={({ note, expectedClose }) => {
             const stored = JSON.parse(
               localStorage.getItem("newLeadsData") || "[]",
@@ -1328,7 +1365,15 @@ const LeadEdit = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-          <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[400px] mx-auto p-6 text-center">
+          <div className="bg-white rounded-[16px] font-manrope shadow-2xl w-full max-w-[400px] mx-auto p-6 text-center relative">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+              title="Close dialog"
+            >
+              <FiX size={16} />
+            </button>
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-4">
               <FiTrash2 size={24} />
             </div>

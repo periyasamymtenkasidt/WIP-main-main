@@ -1,10 +1,9 @@
 import { useState, useRef } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Printer, Loader2 } from "lucide-react";
 import Modal from "./Modal";
 import QuotePreview from "./QuotePreview";
-import { downloadQuoteAsImage } from "../utils/downloadQuoteImage";
 
-// View-only modal: shows the rendered quote preview with a Download (PNG)
+// View-only modal: shows the rendered quote preview with a Save as PDF
 // action only. Used by the "Quote" header button and the Documents card —
 // neither of those should let the user edit or resend.
 const QuotePreviewModal = ({ quote, fileName, onClose }) => {
@@ -14,7 +13,57 @@ const QuotePreviewModal = ({ quote, fileName, onClose }) => {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      await downloadQuoteAsImage(quote, fileName, previewRef.current);
+      const { createRoot } = await import("react-dom/client");
+      const { flushSync } = await import("react-dom");
+
+      // 1. Create a temporary container directly on body
+      let printContainer = document.getElementById("quote-print-temp-container");
+      if (!printContainer) {
+        printContainer = document.createElement("div");
+        printContainer.id = "quote-print-temp-container";
+        document.body.appendChild(printContainer);
+      }
+
+      // 2. Render QuotePreview into the temporary container
+      const root = createRoot(printContainer);
+      flushSync(() => {
+        root.render(<QuotePreview quote={quote} />);
+      });
+
+      // 3. Set printing class on body to isolate the container and hide the rest
+      document.body.classList.add("printing-quote-mode");
+
+      // 4. Set up safe, once-callable cleanup after print dialog closes
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        
+        try {
+          document.body.classList.remove("printing-quote-mode");
+        } catch (e) {}
+        try {
+          window.removeEventListener("afterprint", cleanup);
+        } catch (e) {}
+        try {
+          root.unmount();
+        } catch (e) {}
+        try {
+          printContainer.remove();
+        } catch (e) {}
+      };
+
+      // Register listener BEFORE triggering print dialog to avoid race conditions
+      window.addEventListener("afterprint", cleanup);
+
+      // 5. Trigger print
+      window.print();
+
+      // 6. Synchronous fallback: run cleanup immediately after print dialog returns (blocking call)
+      cleanup();
+    } catch (err) {
+      console.error("[QuotePreviewModal] print failed, falling back to basic print:", err);
+      window.print();
     } finally {
       setDownloading(false);
     }
@@ -42,7 +91,7 @@ const QuotePreviewModal = ({ quote, fileName, onClose }) => {
           </>
         ) : (
           <>
-            <Download size={14} /> Download
+            <Printer size={14} /> Save as PDF
           </>
         )}
       </button>

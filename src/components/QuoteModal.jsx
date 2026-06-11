@@ -86,7 +86,7 @@ import {
 import { roomColor } from "../data/categoryColors";
 import CategorySelect from "./CategorySelect";
 import LibraryPickerModal from "./LibraryPickerModal";
-import { getRoomDefaultDays } from "../data/scheduleConfig";
+import { getRoomDefaultDays, getRoomCategoryPresets } from "../data/scheduleConfig";
 
 const SectionHeader = ({ children }) => (
   <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-select-blue mb-3">
@@ -485,6 +485,38 @@ const inferPresetKey = (initialQuote, presetData) => {
   return keys.includes("2BHK") ? "2BHK" : keys[0];
 };
 
+const EditableItemNameInput = ({ initialValue, onSave, className }) => {
+  const [localValue, setLocalValue] = useState(initialValue);
+
+  useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
+
+  const handleBlur = () => {
+    if (localValue !== initialValue) {
+      onSave(localValue);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.target.blur();
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={localValue || ""}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      placeholder="Item Name…"
+      className={className}
+    />
+  );
+};
+
 // `mode` controls labelling only — "proposal" tweaks copy + button so this
 // modal can be reused for the "Send Proposal" / "Resend Proposal" flow on a
 // lead. Default "quote" keeps the standalone Quick Quote behaviour.
@@ -524,6 +556,16 @@ const QuoteModal = ({
     return () => clearTimeout(t);
   }, [toast]);
 
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(null);
+  const handleDeleteGroup = (roomName) => {
+    setFormData((p) => ({
+      ...p,
+      scopeItems: p.scopeItems.filter((s) => (s.area || "").trim().toUpperCase() !== roomName.trim().toUpperCase()),
+    }));
+    setDeleteGroupConfirm(null);
+    showToast(`Deleted "${roomName}" group`, "info");
+  };
+
   const [destPrompt, setDestPrompt] = useState({
     isOpen: false,
     itemName: "",
@@ -537,32 +579,29 @@ const QuoteModal = ({
   const getDestinationHeading = (itemName, scopeItems, category) => {
     return new Promise((resolve, reject) => {
       const resolvedCategory = category || getCategoryFromItemName(itemName);
-      const itemCatKey = getCategoryKey(resolvedCategory);
 
-      // Filter existing headings to only keep those belonging to the same category
+      // Get ALL headings from Schedule Master (all room/category presets)
+      const scheduleHeadingNames = getRoomCategoryPresets().map((r) => r.name.trim().toUpperCase());
+
+      // Collect ALL existing headings from scope items (not filtered by category)
       const existingHeadings = Array.from(
         new Set(scopeItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
-      ).filter(h => getHeadingCategoryKey(h, scopeItems) === itemCatKey);
+      );
 
-      // Check which headings already contain this item
+      // Combine and deduplicate
+      const allHeadings = Array.from(new Set([...scheduleHeadingNames, ...existingHeadings]));
+
+      // Informational only — not used to hide headings
       const headingsWithItem = scopeItems
         .filter((item) => (item.itemName || "").trim().toLowerCase() === itemName.trim().toLowerCase())
         .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
 
-      // Single Heading Exception - only if there is exactly 1 heading of the matching category
-      if (existingHeadings.length === 1) {
-        const singleHeading = existingHeadings[0];
-        if (!headingsWithItem.includes(singleHeading)) {
-          resolve(singleHeading);
-          return;
-        }
-      }
 
       setDestPrompt({
         isOpen: true,
         itemName,
         category: resolvedCategory,
-        existingHeadings,
+        existingHeadings: allHeadings,
         headingsWithItem,
         onSelect: (selectedHeading) => {
           setDestPrompt((prev) => ({ ...prev, isOpen: false }));
@@ -881,6 +920,9 @@ const QuoteModal = ({
         if (key === "area") {
           target.isAreaCustom = true;
         }
+        if (key === "itemName") {
+          target.isItemNameCustom = true;
+        }
         
         if (key === "length" || key === "breadth" || key === "qty" || key === "rate") {
           const L = Number(target.length) || 0;
@@ -1176,12 +1218,13 @@ const QuoteModal = ({
       subtitle={modalSubtitle}
       onClose={isSending ? undefined : onClose}
       footer={footer}
-      maxWidth="max-w-[1100px]"
-      maxHeight="max-h-[95vh]"
+      maxWidth="max-w-[1300px]"
+      maxHeight="h-[90vh]"
+      bodyScrollable={false}
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6 h-full min-h-0">
         {/* Form pane */}
-        <div className="modal-no-print">
+        <div className="modal-no-print overflow-y-auto h-full pr-2 scroll-hidden-bar">
           {/* Preset is editable in standalone Quote mode but locked in
               Proposal mode (it was chosen during inquiry creation). */}
           {isProposal ? (
@@ -1350,12 +1393,12 @@ const QuoteModal = ({
                 return (
                   <div key={group.room} className="border border-bordergray rounded-xl bg-white overflow-hidden shadow-sm">
                     {/* Accordion Header */}
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group.room)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-bg-soft/40 hover:bg-bg-soft/70 transition-colors cursor-pointer border-b border-bordergray"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-full flex items-center justify-between px-3.5 py-2.5 bg-bg-soft/40 hover:bg-bg-soft/70 transition-colors border-b border-bordergray">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.room)}
+                        className="flex-1 flex items-center gap-2 min-w-0 text-left cursor-pointer focus:outline-none"
+                      >
                         {groupOpen ? (
                           <ChevronDown size={13} className="text-text-muted shrink-0" />
                         ) : (
@@ -1368,11 +1411,21 @@ const QuoteModal = ({
                         <span className="text-[10px] font-semibold text-text-muted bg-bg-soft px-1.5 py-0.5 rounded-md border border-bordergray">
                           {group.rows.length}
                         </span>
+                      </button>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-[11px] font-bold text-textcolor tabular-nums">
+                          {formatAmount(group.total)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteGroupConfirm(group.room)}
+                          className="p-1 rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer"
+                          title={`Delete ${group.room} and all its items`}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-                      <span className="text-[11px] font-bold text-textcolor tabular-nums shrink-0">
-                        {formatAmount(group.total)}
-                      </span>
-                    </button>
+                    </div>
 
                     {/* Accordion Content */}
                     {groupOpen && (
@@ -1382,15 +1435,10 @@ const QuoteModal = ({
                             key={idx}
                             className="rounded-lg border border-border bg-bg-soft/30 p-2 space-y-2"
                           >
-                            <div className="flex items-center justify-between text-[10px] text-text-muted font-bold tracking-wide uppercase">
-                              <span>{item._displayCategory}</span>
-                            </div>
-                            <div className="grid grid-cols-[1fr_1.5fr_110px] gap-2 items-start">
-                              <input
-                                type="text"
-                                value={item.area || ""}
-                                onChange={(e) => updateScope(idx, "area", e.target.value.toUpperCase())}
-                                placeholder="Heading/Room…"
+                            <div className="grid grid-cols-[1fr_1.5fr_110px_28px] gap-2 items-start">
+                              <EditableItemNameInput
+                                initialValue={item.itemName || ""}
+                                onSave={(val) => updateScope(idx, "itemName", val)}
                                 className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
                               />
                               <input
@@ -1411,6 +1459,14 @@ const QuoteModal = ({
                                 placeholder="₹"
                                 className="bg-white border border-bordergray text-[11px] text-darkgray rounded-md px-2 py-2 w-full focus:outline-none focus:border-gray-300 focus:ring-1 focus:ring-gray-300 text-right"
                               />
+                              <button
+                                type="button"
+                                onClick={() => removeScopeRow(idx)}
+                                className="h-8 w-7 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Remove row"
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             </div>
 
                             {/* Material specs */}
@@ -1705,7 +1761,7 @@ const QuoteModal = ({
         </div>
 
         {/* Preview pane */}
-        <div className="lg:sticky lg:top-0 lg:self-start">
+        <div className="overflow-y-auto h-full pl-2 scroll-hidden-bar">
           <p className="text-[10px] uppercase tracking-widest text-text-subtle font-bold mb-2 modal-no-print">
             Live Preview
           </p>
@@ -1736,7 +1792,7 @@ const QuoteModal = ({
               <button
                 type="button"
                 onClick={() => setTermsParentModalOpen(false)}
-                className="text-text-subtle hover:text-textcolor p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-bordergray transition-all cursor-pointer"
+                className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1891,6 +1947,36 @@ const QuoteModal = ({
         onSelect={destPrompt.onSelect}
         onCreateNew={destPrompt.onCreateNew}
       />
+
+      {deleteGroupConfirm && (
+        <Modal
+          title={`Delete ${deleteGroupConfirm}?`}
+          onClose={() => setDeleteGroupConfirm(null)}
+          footer={
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteGroupConfirm(null)}
+                className="px-4 py-2 border border-bordergray rounded-xl text-textcolor hover:bg-bg-soft text-[11px] font-bold transition-all shadow-xs cursor-pointer bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteGroup(deleteGroupConfirm)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[11px] font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          }
+          maxWidth="max-w-[400px]"
+        >
+          <p className="text-[12.5px] text-text-muted leading-relaxed">
+            Are you sure you want to delete the category <strong>{deleteGroupConfirm}</strong> and all its associated items? This action cannot be undone.
+          </p>
+        </Modal>
+      )}
 
       {toast && (
         <Toast key={toast.id} toast={toast} onClose={() => setToast(null)} />

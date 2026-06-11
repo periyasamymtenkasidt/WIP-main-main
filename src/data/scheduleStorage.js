@@ -10,7 +10,7 @@
 // Stored shape: { workStart: "YYYY-MM-DD" | "", rooms: [ {id, room, description,
 // days, owner, status, note} ] }  — array order IS the sequence.
 
-import { getConfigForType } from "./QuotePresets";
+import { getConfigForType, getLatestQuoteForParent } from "./QuotePresets";
 import { getMilestonesForLead } from "./LeadStatusConfig";
 import { getScheduleConfig, getEscalationRole } from "./scheduleConfig";
 
@@ -44,6 +44,10 @@ export function makeRoom(partial = {}) {
     status: cfg.statuses[0] || "Not Started",
     done: false, // manual override: marks a room complete regardless of dates
     note: "",
+    amount: 0,
+    materials: [],
+    quantity: "1 Unit",
+    measurement: "—",
     ...partial,
   };
 }
@@ -52,14 +56,18 @@ export function makeRoom(partial = {}) {
 export function seedRoomsFromProposal(lead) {
   if (!lead) return [];
   const cfg = getConfigForType(lead.quotePreset, lead.propertyType);
-  const items = cfg?.scopeItems || [];
+  const items = lead.quoteScopeItems || getLatestQuoteForParent(lead.proposalId)?.scopeItems || cfg?.scopeItems || [];
   const status0 = getScheduleConfig().statuses[0] || "Not Started";
   return items.map((s) =>
     makeRoom({
-      room: s.area || "",
+      room: s.area || s.room || "",
       description: s.description || "",
       days: s.days ?? "",
       status: status0,
+      amount: s.amount || 0,
+      materials: s.materials || [],
+      quantity: s.quantity || "1 Unit",
+      measurement: s.measurement || "—",
     }),
   );
 }
@@ -69,6 +77,7 @@ export function getOrSeedSchedule(lead) {
   const base = {
     workStart: "",
     delayNote: "",
+    delayAttribution: "", // "client" | "our" — who caused the 7-day post-payment delay
     clientApproved: false, // client signed off on the work-start date
     breachReason: "", // "client" | "our" — who caused a possession breach
     confirmedAt: "", // ISO timestamp; once set the start is locked
@@ -81,6 +90,7 @@ export function getOrSeedSchedule(lead) {
       ...base,
       workStart: saved.workStart || "",
       delayNote: saved.delayNote || "",
+      delayAttribution: saved.delayAttribution || "",
       clientApproved: !!saved.clientApproved,
       breachReason: saved.breachReason || "",
       confirmedAt: saved.confirmedAt || "",

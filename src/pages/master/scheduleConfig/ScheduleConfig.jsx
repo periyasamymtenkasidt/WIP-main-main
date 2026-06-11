@@ -9,7 +9,6 @@ import {
   Home,
   ListChecks,
   Clock,
-  Folder,
 } from "lucide-react";
 import {
   DEFAULT_CONFIG,
@@ -75,7 +74,9 @@ const RoomDaysList = ({ items, onChange }) => {
               placeholder="0"
               className="w-12 bg-white border border-bordergray rounded-md px-1.5 py-1 text-[11.5px] text-textcolor text-center focus:outline-none focus:border-select-blue/40"
             />
-            <span className="text-[10px] font-semibold text-text-subtle">d</span>
+            <span className="text-[10px] font-semibold text-text-subtle">
+              d
+            </span>
           </div>
           <button
             type="button"
@@ -153,90 +154,6 @@ const StringList = ({ items, onChange, placeholder }) => {
   );
 };
 
-// Editable heading list with category association.
-const HeadingsList = ({ items, rooms, onChange }) => {
-  const update = (idx, key, value) =>
-    onChange(items.map((it, i) => (i === idx ? { ...it, [key]: value } : it)));
-  const remove = (idx) => onChange(items.filter((_, i) => i !== idx));
-  const add = () => {
-    if (items.some((it) => !it.name.trim())) return;
-    onChange([{ name: "", category: "" }, ...items]);
-  };
-
-  // Auto-assign category from heading name when the name changes
-  const handleNameChange = (idx, value) => {
-    const trimmed = value.trim();
-    // Find the longest room name that is a prefix of the heading
-    const sortedRooms = [...rooms]
-      .map((r) => r.name.trim())
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length);
-    let autoCategory = trimmed;
-    for (const room of sortedRooms) {
-      if (
-        trimmed.toUpperCase() === room.toUpperCase() ||
-        trimmed.toUpperCase().startsWith(room.toUpperCase() + " - ")
-      ) {
-        autoCategory = room;
-        break;
-      }
-    }
-    onChange(
-      items.map((it, i) =>
-        i === idx ? { ...it, name: value, category: autoCategory } : it,
-      ),
-    );
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <p className="text-[11px] text-text-muted">
-          Destination headings for Proposal Master scope assignment.
-        </p>
-        <button
-          type="button"
-          onClick={add}
-          className="flex items-center gap-1 text-[11px] font-semibold text-select-blue hover:text-primary shrink-0"
-        >
-          <Plus size={12} /> Add
-        </button>
-      </div>
-      {items.map((item, idx) => (
-        <div key={idx} className="flex items-center gap-2 group">
-          <input
-            type="text"
-            value={item.name}
-            onChange={(e) => handleNameChange(idx, e.target.value)}
-            placeholder="e.g. Kitchen - Island Area"
-            className="bg-bg-soft border border-transparent text-[11.5px] text-textcolor rounded-lg px-2.5 py-1.5 w-full focus:outline-none focus:bg-white focus:border-select-blue/40 placeholder:text-text-subtle"
-          />
-          <span className="text-[10px] font-semibold text-text-subtle bg-white/70 px-1.5 py-0.5 rounded-md border border-bordergray whitespace-nowrap shrink-0 min-w-[60px] text-center truncate">
-            {item.category || "—"}
-          </span>
-          <button
-            type="button"
-            onClick={() => remove(idx)}
-            className="h-7 w-6 flex items-center justify-center rounded-md text-text-subtle hover:text-red-500 hover:bg-red-50 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-            title="Remove"
-          >
-            <Trash2 size={11} />
-          </button>
-        </div>
-      ))}
-      {items.length === 0 && (
-        <button
-          type="button"
-          onClick={add}
-          className="w-full text-[11px] text-text-subtle border border-dashed border-bordergray rounded-lg py-3 hover:border-select-blue hover:text-select-blue transition-colors"
-        >
-          + Add your first heading
-        </button>
-      )}
-    </div>
-  );
-};
-
 const ScheduleConfig = () => {
   const [saved, setSaved] = useState(() => getScheduleConfig());
   const [config, setConfig] = useState(saved);
@@ -285,12 +202,7 @@ const ScheduleConfig = () => {
           days: r.days === "" ? "" : Math.max(0, Number(r.days) || 0),
         }))
         .filter((r) => r.name),
-      headings: (config.headings || [])
-        .map((h) => ({
-          name: (h.name || "").trim(),
-          category: (h.category || h.name || "").trim(),
-        }))
-        .filter((h) => h.name),
+
       statuses: config.statuses.map((s) => s.trim()).filter(Boolean),
     };
     saveScheduleConfig(cleaned);
@@ -301,7 +213,7 @@ const ScheduleConfig = () => {
   const handleReset = () => setConfig(DEFAULT_CONFIG);
 
   return (
-    <div className="bg-overallbg font-sans h-full overflow-y-auto pb-28">
+    <div className="bg-overallbg font-sans h-full overflow-y-auto pb-28 scroll-hidden-bar">
       {/* Sticky header */}
       <div className="sticky top-0 z-30 bg-overallbg/80 backdrop-blur-xl border-b border-bordergray/70">
         <div className="px-6 py-4 flex justify-between items-center flex-wrap gap-3">
@@ -426,7 +338,7 @@ const ScheduleConfig = () => {
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+        <div className="grid grid-cols-1 gap-5 items-start">
           {/* Rooms */}
           <Card
             title="Room / category presets"
@@ -439,7 +351,7 @@ const ScheduleConfig = () => {
             />
           </Card>
 
-          {/* Statuses */}
+          {/* Statuses
           <Card
             title="Task statuses"
             icon={<ListChecks size={13} className="text-select-blue" />}
@@ -451,20 +363,8 @@ const ScheduleConfig = () => {
               placeholder="e.g. In Progress"
             />
           </Card>
+          */}
         </div>
-
-        {/* Headings */}
-        <Card
-          title="Destination headings"
-          icon={<Folder size={13} className="text-select-blue" />}
-          badge={(config.headings || []).filter((h) => h.name.trim()).length}
-        >
-          <HeadingsList
-            items={config.headings || []}
-            rooms={config.rooms || []}
-            onChange={(headings) => patch({ headings })}
-          />
-        </Card>
       </div>
     </div>
   );

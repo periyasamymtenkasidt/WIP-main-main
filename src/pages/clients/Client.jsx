@@ -181,6 +181,7 @@ const Client = () => {
             <button
               onClick={() => setShowForm(true)}
               className="flex items-center gap-2 bg-linear-to-r from-select-blue to-dark-blue text-white rounded-lg px-8 py-2.5 text-sm font-medium"
+
             >
               <FiPlusCircle />
               Add Client

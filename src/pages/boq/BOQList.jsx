@@ -16,11 +16,27 @@ import { listBoqs, deleteBoq, duplicateBoq } from "../../data/boqStorage";
 import { formatAmount } from "../../utils/formatAmount";
 
 const STATUS_STYLES = {
-  draft: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+  draft: {
+    bg: "bg-slate-100",
+    text: "text-slate-700",
+    border: "border-slate-200",
+  },
   sent: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
-  approved: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200" },
-  revised: { bg: "bg-amber-100", text: "text-amber-700", border: "border-amber-200" },
-  signed: { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-200" },
+  approved: {
+    bg: "bg-emerald-100",
+    text: "text-emerald-700",
+    border: "border-emerald-200",
+  },
+  revised: {
+    bg: "bg-amber-100",
+    text: "text-amber-700",
+    border: "border-amber-200",
+  },
+  signed: {
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    border: "border-purple-200",
+  },
 };
 
 const BOQList = () => {
@@ -45,7 +61,10 @@ const BOQList = () => {
   }, [items, query, statusFilter]);
 
   const stats = useMemo(() => {
-    const totalValue = items.reduce((s, b) => s + (Number(b.grandTotal) || 0), 0);
+    const totalValue = items.reduce(
+      (s, b) => s + (Number(b.grandTotal) || 0),
+      0,
+    );
     const byStatus = items.reduce((acc, b) => {
       acc[b.status] = (acc[b.status] || 0) + 1;
       return acc;
@@ -73,10 +92,22 @@ const BOQList = () => {
 
   const STATUS_TABS = [
     { value: "all", label: "All", count: stats.total },
-    { value: "draft", label: "Drafts", count: items.filter((b) => b.status === "draft").length },
-    { value: "sent", label: "Sent", count: items.filter((b) => b.status === "sent").length },
+    {
+      value: "draft",
+      label: "Drafts",
+      count: items.filter((b) => b.status === "draft").length,
+    },
+    {
+      value: "sent",
+      label: "Sent",
+      count: items.filter((b) => b.status === "sent").length,
+    },
     { value: "approved", label: "Approved", count: stats.approved },
-    { value: "signed", label: "Signed", count: items.filter((b) => b.status === "signed").length },
+    {
+      value: "signed",
+      label: "Signed",
+      count: items.filter((b) => b.status === "signed").length,
+    },
   ];
 
   return (
@@ -108,10 +139,30 @@ const BOQList = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <BentoStat icon={<Layers size={13} />} label="Total BOQs" value={stats.total} tint="blue" />
-          <BentoStat icon={<Hash size={13} />} label="Drafts" value={stats.drafts} tint="orange" />
-          <BentoStat icon={<TrendingUp size={13} />} label="Approved" value={stats.approved} tint="emerald" />
-          <BentoStat icon={<Wallet size={13} />} label="Total Pipeline Value" value={formatAmount(stats.totalValue)} tint="purple" />
+          <BentoStat
+            icon={<Layers size={13} />}
+            label="Total BOQs"
+            value={stats.total}
+            tint="blue"
+          />
+          <BentoStat
+            icon={<Hash size={13} />}
+            label="Drafts"
+            value={stats.drafts}
+            tint="orange"
+          />
+          <BentoStat
+            icon={<TrendingUp size={13} />}
+            label="Approved"
+            value={stats.approved}
+            tint="emerald"
+          />
+          <BentoStat
+            icon={<Wallet size={13} />}
+            label="Total Pipeline Value"
+            value={formatAmount(stats.totalValue)}
+            tint="purple"
+          />
         </div>
       </div>
 
@@ -136,7 +187,10 @@ const BOQList = () => {
             ))}
           </div>
           <div className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle" />
+            <Search
+              size={12}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle"
+            />
             <input
               type="text"
               value={query}
@@ -232,7 +286,10 @@ const BOQList = () => {
                           >
                             <Trash2 size={12} />
                           </button>
-                          <ChevronRight size={13} className="text-text-subtle ml-1" />
+                          <ChevronRight
+                            size={13}
+                            className="text-text-subtle ml-1"
+                          />
                         </div>
                       </td>
                     </tr>
@@ -259,7 +316,11 @@ const formatDate = (iso) => {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const BentoStat = ({ icon, label, value, tint }) => {
@@ -270,12 +331,18 @@ const BentoStat = ({ icon, label, value, tint }) => {
     emerald: "from-emerald-50 to-white text-emerald-600 border-emerald-100",
   };
   return (
-    <div className={`relative bg-linear-to-br ${tints[tint]} border rounded-xl p-3 overflow-hidden`}>
+    <div
+      className={`relative bg-linear-to-br ${tints[tint]} border rounded-xl p-3 overflow-hidden`}
+    >
       <div className="flex items-center justify-between mb-1">
         <span className="opacity-80">{icon}</span>
-        <span className="text-[9.5px] font-bold uppercase tracking-wider opacity-70">{label}</span>
+        <span className="text-[9.5px] font-bold uppercase tracking-wider opacity-70">
+          {label}
+        </span>
       </div>
-      <p className="text-[16px] font-bold text-textcolor tabular-nums leading-tight">{value}</p>
+      <p className="text-[16px] font-bold text-textcolor tabular-nums leading-tight">
+        {value}
+      </p>
     </div>
   );
 };

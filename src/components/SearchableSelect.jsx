@@ -1,35 +1,44 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
-import { getScheduleConfig } from "../data/scheduleConfig";
 
-// Strict room/category picker backed by the canonical Master → Schedule list.
-// Categories are managed only in Master → Schedule — this is read-only here.
-// Any current off-list value is preserved as an option so existing data isn't lost.
-// Enhanced with an inline searchable dropdown behavior.
-const CategorySelect = ({ value, onChange, className, placeholder = "Select room…", disabled }) => {
-  const [names] = useState(() => getScheduleConfig().rooms.map((r) => r.name));
+const SearchableSelect = ({ value, onChange, options, className, placeholder = "Select option…", disabled }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [typedValue, setTypedValue] = useState("");
   const dropdownRef = useRef(null);
 
-  // Keep the current value selectable even if it's not in the master list.
-  const options = useMemo(() => {
-    return value && !names.includes(value) ? [value, ...names] : names;
-  }, [value, names]);
+  // Find label of the current value
+  const currentOption = useMemo(() => {
+    return options.find((opt) => {
+      if (typeof opt === "object") {
+        return opt.value === value || opt.code === value;
+      }
+      return opt === value;
+    });
+  }, [value, options]);
 
-  // Sync typedValue with value prop when not actively open
+  const displayLabel = useMemo(() => {
+    if (value === undefined || value === null || value === "") return "";
+    if (!currentOption) return String(value);
+    if (typeof currentOption === "object") {
+      return currentOption.label || currentOption.name || currentOption.code || String(currentOption.value);
+    }
+    return String(currentOption);
+  }, [currentOption, value]);
+
   useEffect(() => {
     if (!isOpen) {
-      setTypedValue(value || "");
+      setTypedValue(displayLabel);
     }
-  }, [value, isOpen]);
+  }, [displayLabel, isOpen]);
 
-  // Filter options by typed text when typing
   const filteredOptions = useMemo(() => {
     if (!isTyping || !typedValue.trim()) return options;
     const q = typedValue.trim().toLowerCase();
-    return options.filter((opt) => opt.toLowerCase().includes(q));
+    return options.filter((opt) => {
+      const label = typeof opt === "object" ? (opt.label || opt.name || opt.code || String(opt.value)) : String(opt);
+      return label.toLowerCase().includes(q);
+    });
   }, [options, typedValue, isTyping]);
 
   useEffect(() => {
@@ -52,12 +61,13 @@ const CategorySelect = ({ value, onChange, className, placeholder = "Select room
   const handleInputChange = (e) => {
     const newVal = e.target.value;
     setTypedValue(newVal);
-    onChange(newVal);
     setIsTyping(true);
   };
 
-  const handleSelect = (val) => {
-    setTypedValue(val);
+  const handleSelect = (opt) => {
+    const val = typeof opt === "object" ? (opt.value !== undefined ? opt.value : opt.code) : opt;
+    const label = typeof opt === "object" ? (opt.label || opt.name || opt.code || String(opt.value)) : String(opt);
+    setTypedValue(label);
     onChange(val);
     setIsOpen(false);
     setIsTyping(false);
@@ -100,14 +110,16 @@ const CategorySelect = ({ value, onChange, className, placeholder = "Select room
           <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 scrollbar-thin">
             {filteredOptions.length === 0 && (
               <p className="text-[11px] text-text-subtle text-center py-3 italic">
-                No matching rooms
+                No matches
               </p>
             )}
             {filteredOptions.map((opt) => {
-              const isSelected = opt === value;
+              const val = typeof opt === "object" ? (opt.value !== undefined ? opt.value : opt.code) : opt;
+              const label = typeof opt === "object" ? (opt.label || opt.name || opt.code || String(opt.value)) : String(opt);
+              const isSelected = val === value;
               return (
                 <button
-                  key={opt}
+                  key={String(val)}
                   type="button"
                   onClick={() => handleSelect(opt)}
                   className={`w-full flex items-center px-2.5 py-2 rounded-lg text-left text-[11.5px] font-semibold transition-all ${
@@ -116,7 +128,7 @@ const CategorySelect = ({ value, onChange, className, placeholder = "Select room
                       : "hover:bg-bg-soft border border-transparent text-textcolor"
                   }`}
                 >
-                  <span className="truncate">{opt}</span>
+                  <span className="truncate">{label}</span>
                 </button>
               );
             })}
@@ -127,4 +139,4 @@ const CategorySelect = ({ value, onChange, className, placeholder = "Select room
   );
 };
 
-export default CategorySelect;
+export default SearchableSelect;

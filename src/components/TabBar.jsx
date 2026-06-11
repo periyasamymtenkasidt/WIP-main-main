@@ -38,6 +38,32 @@ const TabBar = ({ tabs = [], active = 0, onChange, variant = "folder" }) => {
       </div>
     );
   }
+
+  if (variant === "underline") {
+    return (
+      <div className="flex gap-6 border-b border-bordergray mb-6">
+        {tabs.map((tab, idx) => {
+          const isActive = active === idx;
+          return (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => onChange?.(idx)}
+              className={`pb-3 text-xs font-bold px-4 border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                isActive
+                  ? "border-select-blue text-select-blue"
+                  : "border-transparent text-text-muted hover:text-darkgray"
+              }`}
+            >
+              {tab}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return null;
 };
 
 export default TabBar;
