@@ -58,8 +58,8 @@ export const computeItemQty = (item) => {
 
 export const computeItemAmount = (item) => {
   const qty = computeItemQty(item);
-  const rate = Number(item.rate) || 0;
-  const gross = qty * rate;
+  const baseRate = Number(item.rate) || 0;
+  const gross = qty * baseRate;
   const disc = item.discount || { type: "percent", value: 0 };
   const discAmt =
     disc.type === "percent"

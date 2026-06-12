@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FileText, BookOpen, FileCheck, CalendarClock, Layers as MasterIcon } from "lucide-react";
+import { FileText, BookOpen, FileCheck, CalendarClock, Layers } from "lucide-react";
 import ProposalMaster from "./proposalMaster/ProposalMaster";
 import ItemLibrary from "./itemMaster/ItemLibrary";
+import MaterialMaster from "./materialMaster/MaterialMaster";
 import TermsAndConditions from "./termsAndConditions/TermsAndConditions";
 import ScheduleConfig from "./scheduleConfig/ScheduleConfig";
 
@@ -23,6 +24,13 @@ const TABS = [
     icon: BookOpen,
     description: "Reusable BOQ line items, rates & specs",
     component: ItemLibrary,
+  },
+  {
+    id: "materials",
+    label: "Material Master",
+    icon: Layers,
+    description: "Catalog of raw construction materials, bulk pricing, and HSN codes",
+    component: MaterialMaster,
   },
   {
     id: "terms",
@@ -69,7 +77,7 @@ const Master = () => {
       <div className="bg-white border-b rounded-xl border-bordergray shrink-0">
         <div className="px-6 pt-4 pb-2 flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-select-blue/10 text-select-blue flex items-center justify-center">
-            <MasterIcon size={14} />
+            <Layers size={14} />
           </div>
           <div>
             <h1 className="text-[15px] font-bold text-textcolor leading-tight">

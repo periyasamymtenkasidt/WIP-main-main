@@ -30,6 +30,7 @@ import {
 } from "../../data/siteStorage";
 import InputField from "../../components/InputField";
 import ClientAvatar from "../../assets/images/Client_avatar.png";
+import DesignWorkspace from "./components/DesignWorkspace";
 
 const toInputDate = (dateStr) => {
   if (!dateStr || typeof dateStr !== "string") return "";
@@ -73,12 +74,13 @@ const SiteDetail = () => {
   const [loadingSurvey, setLoadingSurvey] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
 
-  // Operations checklist state
   const [checklist, setChecklist] = useState(() => {
     try {
       const saved = localStorage.getItem(`siteChecklist_${id}`);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch (e) {
+      console.warn("Failed to load site checklist:", e);
+    }
     return [
       { name: "Civil & Masonry Work", status: "Completed" },
       { name: "Electrical Piping & Wiring", status: "In Progress" },
@@ -105,21 +107,29 @@ const SiteDetail = () => {
   useEffect(() => {
     const data = getSite(id);
     if (data) {
-      setSite(data);
-      setEditStatus(data.status || "");
-      setEditProgress(data.progress || 0);
-      setEditSupervisor(data.supervisor || "");
-      setEditTargetDate(data.targetDate || "");
-      setEditNotes(data.notes || "");
-      setEditAddress(data.fullAddress || "");
+      setTimeout(() => {
+        setSite(data);
+        setEditStatus(data.status || "");
+        setEditProgress(data.progress || 0);
+        setEditSupervisor(data.supervisor || "");
+        setEditTargetDate(data.targetDate || "");
+        setEditNotes(data.notes || "");
+        setEditAddress(data.fullAddress || "");
+        setLoading(false);
+      }, 0);
+    } else {
+      setTimeout(() => {
+        setLoading(false);
+      }, 0);
     }
-    setLoading(false);
   }, [id]);
 
   // Load survey media from API
   useEffect(() => {
     if (site) {
-      setLoadingSurvey(true);
+      setTimeout(() => {
+        setLoadingSurvey(true);
+      }, 0);
       fetchSurveyMedia(site.siteID).then((data) => {
         setSurveyData(data);
         setLoadingSurvey(false);
@@ -136,15 +146,7 @@ const SiteDetail = () => {
     else if (!val) setEditProgress(0);
   };
 
-  const handleProgressChange = (val) => {
-    const num = Number(val);
-    setEditProgress(num);
-    if (num === 0) setEditStatus("");
-    else if (num <= 25) setEditStatus("Survey");
-    else if (num <= 50) setEditStatus("Design");
-    else if (num <= 75) setEditStatus("In Progress");
-    else setEditStatus("Completed");
-  };
+
 
   const handleSaveChanges = async () => {
     if (!site) return;
@@ -170,6 +172,11 @@ const SiteDetail = () => {
 
   const handleExpandSurveyPhoto = (images, initialIdx, title) => {
     setLightboxImg({ images, currentIndex: initialIdx, title });
+  };
+
+  const handleDesignWorkspaceSave = (updatedSite) => {
+    saveSite(updatedSite);
+    setSite(updatedSite);
   };
 
   if (loading) {
@@ -215,6 +222,19 @@ const SiteDetail = () => {
   };
   const activeStatusColor =
     statusColors[site.status?.toLowerCase()] || "bg-gray-100 text-gray-800 border-gray-200";
+
+  if (site.status?.toLowerCase() === "design") {
+    return (
+      <div className="bg-overallbg p-6 font-sans h-full flex flex-col overflow-y-auto lg:overflow-hidden scroll-hidden-bar">
+        <DesignWorkspace
+          site={site}
+          onSave={handleDesignWorkspaceSave}
+          onExpandPhoto={handleExpandSurveyPhoto}
+          navigate={navigate}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-overallbg p-6 font-sans h-full flex flex-col overflow-y-auto lg:overflow-hidden scroll-hidden-bar">
@@ -319,7 +339,7 @@ const SiteDetail = () => {
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
                 <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Start Date</span>
                 {site.startDate === "Awaiting Advance Payment" ? (
-                  <span className="font-extrabold text-amber-600 text-[10px] bg-amber-50 border border-amber-100 px-2.5 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider">
+                  <span className="font-bold text-amber-600 text-[10px] bg-amber-50 border border-amber-100 px-2.5 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider">
                     <FiAlertTriangle size={11} />
                     Awaiting Advance
                   </span>
@@ -351,11 +371,11 @@ const SiteDetail = () => {
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
                 <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Advance Payment</span>
                 {site.isAdvancePaid ? (
-                  <span className="font-extrabold text-emerald-700 text-[9px] bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider">
+                  <span className="font-bold text-emerald-700 text-[9px] bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider">
                     Paid ({site.advancePaidDate})
                   </span>
                 ) : (
-                  <span className="font-extrabold text-red-600 text-[9px] bg-red-50 border border-red-100 px-2 py-0.5 rounded uppercase tracking-wider">
+                  <span className="font-bold text-red-600 text-[10px] bg-red-50 border border-red-100 px-2 py-0.5 rounded uppercase tracking-wider">
                     Pending
                   </span>
                 )}
@@ -428,7 +448,7 @@ const SiteDetail = () => {
                 } else if (isActive || (editProgress === 0 && phase.id === 1)) {
                   bgClass = "bg-blue-50/50 border-blue-200 text-select-blue shadow-xs";
                   barColor = "bg-select-blue";
-                  labelColor = "text-blue-950 font-extrabold";
+                  labelColor = "text-blue-950 font-bold";
                   badge = (
                     <span className="text-[8px] font-bold uppercase tracking-wider text-select-blue bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded-sm">
                       Active
@@ -443,7 +463,7 @@ const SiteDetail = () => {
                       {badge}
                     </div>
                     <div>
-                      <h5 className={`text-xs font-extrabold tracking-tight ${labelColor}`}>{phase.name}</h5>
+                      <h5 className={`text-xs font-bold tracking-tight ${labelColor}`}>{phase.name}</h5>
                       <span className="text-[9.5px] opacity-60 font-semibold">{phaseProgress.toFixed(0)}% Done</span>
                     </div>
                     <div className="w-full h-1 bg-gray-200/60 rounded-full overflow-hidden mt-1">

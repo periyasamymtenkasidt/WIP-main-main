@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -19,9 +19,9 @@ import CategorySelect from "./CategorySelect";
 import {
   getScheduleConfig,
   getRoomDefaultDays,
+  getScheduleHeadings,
   getCategoryFromHeading,
   addScheduleHeading,
-  getRoomCategoryPresets,
 } from "../data/scheduleConfig";
 import { roomColor } from "../data/categoryColors";
 import {
@@ -75,6 +75,7 @@ import {
   computeLibraryItemQty,
   computeLibraryItemAmount,
 } from "../data/itemLibrary";
+import { listMaterials } from "../data/materialLibrary";
 import { UNITS, HSN_SUGGESTIONS, GST_OPTIONS } from "../data/boqUnits";
 
 const inputBase =
@@ -187,22 +188,32 @@ const ItemFormModal = ({
       // Use Schedule Master heading to get the root category
       const rootCategory = getCategoryFromHeading(resolvedCategory);
 
-      // Get ALL headings from Schedule Master (all room/category presets)
-      const scheduleHeadingNames = getRoomCategoryPresets().map((r) => r.name.toUpperCase());
+      // Get headings from Schedule Master filtered by category
+      const scheduleHeadingNames = getScheduleHeadings(rootCategory).map((h) => h.name.toUpperCase());
 
-      // Also include ALL headings from existing scope items (not filtered by category)
+      // Also include headings from existing scope items that match the category
       const scopeHeadings = Array.from(
         new Set(allItems.map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase()))
-      );
+      ).filter(h => {
+        const hCat = getCategoryFromHeading(h).toUpperCase();
+        return hCat === rootCategory.toUpperCase();
+      });
 
       // Combine and deduplicate
       const existingHeadings = Array.from(new Set([...scheduleHeadingNames, ...scopeHeadings]));
 
-      // Informational only — not used to hide headings
       const headingsWithItem = allItems
         .filter((item) => (item.itemName || item.description || "").trim().toLowerCase() === itemName.trim().toLowerCase())
         .map((item) => (item.area || item.heading || "Unassigned").trim().toUpperCase());
 
+      // Single Heading Exception - only if there is exactly 1 heading of the matching category
+      if (existingHeadings.length <= 1) {
+        const singleHeading = existingHeadings.length === 1 ? existingHeadings[0] : rootCategory.toUpperCase();
+        if (!headingsWithItem.includes(singleHeading)) {
+          resolve(singleHeading);
+          return;
+        }
+      }
 
       setDestPrompt({
         isOpen: true,
@@ -229,10 +240,20 @@ const ItemFormModal = ({
   };
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
 
   const update = (changes) => setForm((p) => ({ ...p, ...changes }));
   const addMaterial = () =>
-    update({ materials: [...form.materials, { name: "", spec: "" }] });
+    update({ materials: [...form.materials, { name: "", spec: "", rate: "" }] });
+  const handlePickMaterials = (selectedMaterials) => {
+    const newMaterials = selectedMaterials.map((mat) => ({
+      name: mat.name,
+      spec: mat.specifications || "",
+      rate: mat.rate || "",
+    }));
+    update({ materials: [...form.materials, ...newMaterials] });
+    setMaterialPickerOpen(false);
+  };
   const updateMaterial = (idx, key, v) =>
     update({
       materials: form.materials.map((m, i) =>
@@ -248,8 +269,7 @@ const ItemFormModal = ({
   useEffect(() => {
     if (roomCategoryMode && watchedItemName && watchedItemName !== prevItemName) {
       const desc = getDetailedDescription(watchedItemName);
-      // Only populate description when actual data exists (Req 6)
-      if (desc && desc !== watchedItemName) {
+      if (desc) {
         rhfSetValue("spec", desc, { shouldValidate: true });
       }
       setPrevItemName(watchedItemName);
@@ -262,58 +282,10 @@ const ItemFormModal = ({
     return getCategoryFromHeading(watchedHeading);
   }, [watchedHeading]);
 
-  // ── Reset dependent fields when heading/category changes ────────────────
-  // Tracks the previous heading so we can detect a genuine category switch
-  // (not the initial render or same-heading re-selection).
-  const prevHeadingRef = useRef(watchedHeading || "");
-  useEffect(() => {
-    if (!roomCategoryMode) return;
-    const prev = prevHeadingRef.current;
-    const next = watchedHeading || "";
-    prevHeadingRef.current = next;
-
-    // Skip no-change cases, and skip if next is empty (e.g. cleared)
-    if (!next || prev === next) return;
-
-    // Determine if the ROOT category actually changed
-    const prevCat = getCategoryFromHeading(prev);
-    const nextCat = getCategoryFromHeading(next);
-
-    // Map Number of Days immediately from Schedule Master when heading changes
-    // (Req 2) — regardless of whether the category changed or not
-    const newDefaultDays = getRoomDefaultDays(nextCat);
-
-    if (prevCat === nextCat) {
-      update({
-        days: newDefaultDays,
-      });
-      return;
-    }
-
-    // Category changed — clear all dependent fields
-    rhfSetValue("itemName", "", { shouldValidate: false });
-    rhfSetValue("spec", "", { shouldValidate: false });
-    rhfSetValue("rate", 0, { shouldValidate: false });
-    rhfSetValue("hsn", "", { shouldValidate: false });
-    rhfSetValue("length", 0, { shouldValidate: false });
-    rhfSetValue("breadth", 0, { shouldValidate: false });
-    rhfSetValue("height", 0, { shouldValidate: false });
-    rhfSetValue("qty", 0, { shouldValidate: false });
-    update({
-      days: newDefaultDays,
-      materials: [],
-      unit: "sqft",
-      gstPercent: 18,
-      masterId: undefined,
-    });
-    setPrevItemName("");
-  }, [watchedHeading, roomCategoryMode]);
-
   // Auto-populate fields when an item is selected from the FilteredItemNameDropdown
   const handleItemNameSelect = (libraryItem) => {
     const itemName = libraryItem.description || "";
-    // Only populate spec from actual data — don't fallback to itemName (Req 6)
-    const spec = libraryItem.spec || getDetailedDescription(itemName) || "";
+    const spec = libraryItem.spec || getDetailedDescription(itemName) || itemName;
     rhfSetValue("itemName", itemName, { shouldValidate: true });
     rhfSetValue("spec", spec, { shouldValidate: true });
     rhfSetValue("rate", libraryItem.rate || 0, { shouldValidate: true });
@@ -339,15 +311,14 @@ const ItemFormModal = ({
   const libraryItemToFormState = (lib) => {
     const defaultHeading = (lib.category || "").toUpperCase();
     const defaultItemName = lib.description || "";
-    // Only populate spec from actual data — don't fallback to itemName (Req 6)
-    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || "";
+    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || defaultItemName;
     return {
       ...blankLibraryItem(),
       ...lib,
       draftId: Math.random().toString(36).substring(2, 9),
       heading: defaultHeading,
       itemName: defaultItemName,
-      description: defaultItemName,
+      description: defaultSpec,
       spec: defaultSpec,
       hsn: lib.hsn || "",
       rate: lib.rate || 0,
@@ -366,16 +337,11 @@ const ItemFormModal = ({
   const fillFromLibrary = (lib) => {
     const defaultHeading = (lib.category || "").toUpperCase();
     const defaultItemName = lib.description || "";
-    // Only populate spec from actual data — don't fallback to itemName (Req 6)
-    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || "";
-    
-    prevHeadingRef.current = defaultHeading;
-    setPrevItemName(defaultItemName);
-
+    const defaultSpec = lib.spec || getDetailedDescription(defaultItemName) || defaultItemName;
     rhfReset({
       heading: defaultHeading,
       itemName: defaultItemName,
-      description: defaultItemName,
+      description: defaultSpec,
       spec: defaultSpec,
       hsn: lib.hsn || "",
       rate: lib.rate || 0,
@@ -391,7 +357,7 @@ const ItemFormModal = ({
       masterId: lib.id,
       heading: defaultHeading,
       itemName: defaultItemName,
-      description: defaultItemName,
+      description: defaultSpec,
       spec: defaultSpec,
       materials: lib.materials ? lib.materials.map((m) => ({ ...m })) : [],
       tags: lib.tags ? [...lib.tags] : [],
@@ -420,15 +386,11 @@ const ItemFormModal = ({
         // Process one category at a time — one destination prompt per category
         for (const [category, items] of categoryGroups) {
           // Get the destination heading for this category (shown once)
-          let heading = "";
-          if (roomCategoryMode) {
-            try {
-              heading = await getDestinationHeading(category, category);
-            } catch {
-              continue; // user cancelled this category, skip all its items
-            }
-          } else {
-            heading = category;
+          let heading;
+          try {
+            heading = await getDestinationHeading(category, category);
+          } catch {
+            continue; // user cancelled this category, skip all its items
           }
 
           // Bulk-assign all non-duplicate items in this category
@@ -482,20 +444,13 @@ const ItemFormModal = ({
         setPickerOpen(false);
       } else {
         const itemName = libOrLibs.description || "";
-        const heading = roomCategoryMode
-          ? (initial?.heading || watchedHeading || await getDestinationHeading(itemName, libOrLibs.category))
-          : "";
+        const heading = await getDestinationHeading(itemName, libOrLibs.category);
         
-        const defaultSpec = libOrLibs.spec || getDetailedDescription(itemName) || "";
-        const resolvedDays = libOrLibs.days !== "" && libOrLibs.days != null ? libOrLibs.days : getRoomDefaultDays(libOrLibs.category || "");
-
-        prevHeadingRef.current = heading;
-        setPrevItemName(itemName);
-
+        const defaultSpec = libOrLibs.spec || getDetailedDescription(itemName) || itemName;
         rhfReset({
           heading: heading,
           itemName: itemName,
-          description: itemName,
+          description: defaultSpec,
           spec: defaultSpec,
           hsn: libOrLibs.hsn || "",
           rate: libOrLibs.rate || 0,
@@ -511,11 +466,10 @@ const ItemFormModal = ({
           masterId: libOrLibs.id,
           heading: heading,
           itemName: itemName,
-          description: itemName,
+          description: defaultSpec,
           spec: defaultSpec,
           materials: libOrLibs.materials ? libOrLibs.materials.map((m) => ({ ...m })) : [],
           tags: libOrLibs.tags ? [...libOrLibs.tags] : [],
-          days: resolvedDays,
         }));
         setPickerOpen(false);
       }
@@ -525,15 +479,9 @@ const ItemFormModal = ({
   };
 
   const loadDraftIntoForm = (draft) => {
-    const heading = draft.heading || draft.area || "";
-    const itemName = draft.itemName || draft.description || "";
-
-    prevHeadingRef.current = heading;
-    setPrevItemName(itemName);
-
     rhfReset({
-      heading: heading,
-      itemName: itemName,
+      heading: draft.heading || draft.area || "",
+      itemName: draft.itemName || draft.description || "",
       description: draft.description || "",
       spec: draft.spec || draft.description || "",
       hsn: draft.hsn || "",
@@ -555,8 +503,6 @@ const ItemFormModal = ({
 
   const handleNewDraftClick = () => {
     setSelectedDraftIndex(null);
-    prevHeadingRef.current = "";
-    setPrevItemName("");
     rhfReset({
       heading: "",
       itemName: "",
@@ -592,23 +538,8 @@ const ItemFormModal = ({
       const currentItemName = data.itemName.trim().toLowerCase();
 
       // Check against existing scope items
-      // When editing, exclude the record currently being edited from duplicate check.
-      // Match by id if available, otherwise fall back to matching the original
-      // heading + itemName from the initial prop (covers ProposalMaster scope items
-      // which are identified by index, not id).
-      const initialHeading = (initial?.heading || initial?.area || "").trim().toUpperCase();
-      const initialItemName = (initial?.itemName || initial?.description || "").trim().toLowerCase();
-      const isEditMode = !!(initial && (initial.id || initialItemName));
-
       const isDuplicateInScope = (existingScopeItems || []).some((item) => {
         if (initial && initial.id && item.id === initial.id) return false;
-        // Fallback: exclude the item that matches the original heading + itemName
-        // being edited (only one match is excluded to avoid masking true duplicates)
-        if (isEditMode && !initial.id) {
-          const itemHeading = (item.area || item.heading || "").trim().toUpperCase();
-          const itemName = (item.itemName || "").trim().toLowerCase();
-          if (itemHeading === initialHeading && itemName === initialItemName) return false;
-        }
         return (
           (item.area || item.heading || "").trim().toUpperCase() === currentHeading &&
           (item.itemName || "").trim().toLowerCase() === currentItemName
@@ -638,11 +569,6 @@ const ItemFormModal = ({
         setError("description", { type: "manual", message: "Item Name is required" });
         return false;
       }
-      // Req 3: Item Master requires Room / Category selection before saving
-      if (showCategory && !form.category?.trim()) {
-        setError("description", { type: "manual", message: "Please select a Room / Category before adding the item." });
-        return false;
-      }
     }
     return true;
   };
@@ -659,14 +585,18 @@ const ItemFormModal = ({
       spec: validatedData.spec || "",
       area: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
       isDescriptionCustom,
-      isItemNameCustom: true,
       hsn: validatedData.hsn || "",
       rate: Number(validatedData.rate) || 0,
       gstPercent: Number(form.gstPercent) || 18,
       length: Number(validatedData.length) || 0,
       breadth: Number(validatedData.breadth) || 0,
       height: Number(validatedData.height) || 0,
-      qty: Number(validatedData.qty) || 0,
+      qty: computeLibraryItemQty({
+        length: Number(validatedData.length) || 0,
+        breadth: Number(validatedData.breadth) || 0,
+        height: Number(validatedData.height) || 0,
+        qty: Number(validatedData.qty) || 0,
+      }),
     };
 
     if (selectedDraftIndex !== null) {
@@ -721,14 +651,18 @@ const ItemFormModal = ({
       spec: validatedData.spec || "",
       area: roomCategoryMode ? validatedData.heading.trim().toUpperCase() : "",
       isDescriptionCustom,
-      isItemNameCustom: true,
       hsn: validatedData.hsn || "",
       rate: Number(validatedData.rate) || 0,
       gstPercent: Number(form.gstPercent) || 18,
       length: Number(validatedData.length) || 0,
       breadth: Number(validatedData.breadth) || 0,
       height: Number(validatedData.height) || 0,
-      qty: Number(validatedData.qty) || 0,
+      qty: computeLibraryItemQty({
+        length: Number(validatedData.length) || 0,
+        breadth: Number(validatedData.breadth) || 0,
+        height: Number(validatedData.height) || 0,
+        qty: Number(validatedData.qty) || 0,
+      }),
     });
   };
 
@@ -751,6 +685,10 @@ const ItemFormModal = ({
   const derivedArea = computeLibraryItemArea(computeForm);
   const derivedQty = computeLibraryItemQty(computeForm);
   const derivedAmount = computeLibraryItemAmount(computeForm);
+  const derivedMaterialTotal = (form.materials || []).reduce(
+    (sum, m) => sum + (Number(m.rate) || 0),
+    0
+  );
   const dimsHint =
     form.unit === "sqft" || form.unit === "sqm"
       ? "Area = L × D · Qty overrides for wastage"
@@ -766,11 +704,13 @@ const ItemFormModal = ({
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
     >
       <div
         className={`bg-white rounded-2xl shadow-2xl w-full max-h-[92vh] overflow-hidden flex flex-col transition-all ${
           multiEntryMode ? "max-w-5xl" : "max-w-3xl"
         }`}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
           <div className="flex items-center gap-2">
@@ -790,7 +730,7 @@ const ItemFormModal = ({
             >
               <Pipette size={12} /> Pick from Library
             </button>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer">
+            <button type="button" onClick={onClose} className="text-text-subtle hover:text-textcolor cursor-pointer">
               <X size={16} />
             </button>
           </div>
@@ -925,22 +865,6 @@ const ItemFormModal = ({
               </>
             ) : (
               <>
-                {showCategory && (
-                  <div>
-                    <Label>Room / Category *</Label>
-                    <CategorySelect
-                      value={form.category}
-                      onChange={(v) => {
-                        const d = getRoomDefaultDays(v);
-                        update({
-                          category: v,
-                          days: d,
-                        });
-                      }}
-                      className={`${inputBase} cursor-pointer`}
-                    />
-                  </div>
-                )}
                 <div>
                   <Label>Item Name *</Label>
                   <InputField
@@ -981,7 +905,25 @@ const ItemFormModal = ({
               </div>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className={`grid grid-cols-2 sm:grid-cols-${showCategory ? 4 : 3} gap-3`}>
+              {showCategory && (
+                <div>
+                  <Label>Room / Category</Label>
+                  <CategorySelect
+                    value={form.category}
+                    onChange={(v) => {
+                      const d = getRoomDefaultDays(v);
+                      update({
+                        category: v,
+                        ...(form.days === "" || form.days == null
+                          ? { days: d }
+                          : {}),
+                      });
+                    }}
+                    className={`${inputBase} cursor-pointer`}
+                  />
+                </div>
+              )}
               <div>
                 <Label>HSN Code</Label>
                 <InputField
@@ -1030,7 +972,7 @@ const ItemFormModal = ({
                 <NumField label="Depth" value={watchedFields.breadth} onChange={(v) => rhfSetValue("breadth", v, { shouldValidate: true })} error={errors.breadth?.message} />
                 <NumField label="Height" value={watchedFields.height} onChange={(v) => rhfSetValue("height", v, { shouldValidate: true })} error={errors.height?.message} />
                 <ReadOnlyField label="Area" value={derivedArea} unitLabel={unitLabel} />
-                <NumField label="Qty" value={watchedFields.qty} onChange={(v) => rhfSetValue("qty", v, { shouldValidate: true })} tabular bold placeholder={derivedArea > 0 ? String(derivedArea) : "0"} error={errors.qty?.message} />
+                <ReadOnlyField label="Qty" value={derivedQty} unitLabel={unitLabel} />
                 <NumField label={`Rate (₹/${unitLabel})`} value={watchedFields.rate} onChange={(v) => rhfSetValue("rate", v, { shouldValidate: true })} tabular prefix="₹" error={errors.rate?.message} />
               </div>
             </div>
@@ -1055,6 +997,12 @@ const ItemFormModal = ({
                   {unitLabel}
                 </span>
                 <span className="text-text-muted">
+                  Material Total:{" "}
+                  <span className="font-bold text-textcolor tabular-nums">
+                    ₹{derivedMaterialTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </span>
+                </span>
+                <span className="text-text-muted">
                   Amount:{" "}
                   <span className="font-bold text-textcolor tabular-nums">
                     ₹{derivedAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
@@ -1066,13 +1014,23 @@ const ItemFormModal = ({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="mb-0">Materials & Specifications</Label>
-                <button
-                  type="button"
-                  onClick={addMaterial}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-select-blue hover:text-primary cursor-pointer"
-                >
-                  <Plus size={11} /> Add Material
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMaterialPickerOpen(true)}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-select-blue hover:text-primary cursor-pointer"
+                  >
+                    <Package size={11} /> Pick from Master
+                  </button>
+                  <span className="text-bordergray">|</span>
+                  <button
+                    type="button"
+                    onClick={addMaterial}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-select-blue hover:text-primary cursor-pointer"
+                  >
+                    <Plus size={11} /> Add Material
+                  </button>
+                </div>
               </div>
               <div className="space-y-1.5">
                 {form.materials.length === 0 && (
@@ -1080,8 +1038,8 @@ const ItemFormModal = ({
                     No materials yet — add brand & spec to lock in quality
                   </p>
                 )}
-                {form.materials.map((m, idx) => (
-                  <div key={idx} className="grid grid-cols-[140px_1fr_28px] gap-2 items-center">
+                 {form.materials.map((m, idx) => (
+                  <div key={idx} className="grid grid-cols-[130px_1fr_75px_28px] gap-2 items-center">
                     <input
                       type="text"
                       value={m.name}
@@ -1096,6 +1054,18 @@ const ItemFormModal = ({
                       placeholder="BWP 19mm Greenply"
                       className={`${inputBase} text-[11.5px] py-1.5`}
                     />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={m.rate || ""}
+                        onChange={(e) => updateMaterial(idx, "rate", e.target.value)}
+                        placeholder="Rate"
+                        className={`${inputBase} text-[11.5px] py-1.5 pl-4 text-right`}
+                      />
+                      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-text-subtle font-medium">
+                        ₹
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeMaterial(idx)}
@@ -1205,6 +1175,13 @@ const ItemFormModal = ({
         />
       )}
 
+      {materialPickerOpen && (
+        <MaterialPicker
+          onClose={() => setMaterialPickerOpen(false)}
+          onPick={handlePickMaterials}
+        />
+      )}
+
       <DestinationPromptModal
         isOpen={destPrompt.isOpen}
         onClose={destPrompt.onCancel}
@@ -1271,9 +1248,11 @@ const LibraryPicker = ({ excludeId, onClose, onPick, multiSelectMode = false }) 
   return (
     <div
       className="fixed inset-0 z-60 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
           <div className="flex items-center gap-2">
@@ -1291,7 +1270,7 @@ const LibraryPicker = ({ excludeId, onClose, onPick, multiSelectMode = false }) 
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer">
+          <button type="button" onClick={onClose} className="text-text-subtle hover:text-textcolor cursor-pointer">
             <X size={16} />
           </button>
         </div>
@@ -1409,6 +1388,144 @@ const LibraryPicker = ({ excludeId, onClose, onPick, multiSelectMode = false }) 
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+const MaterialPicker = ({ onClose, onPick }) => {
+  const [items] = useState(() => listMaterials());
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((it) => {
+      if (!q) return true;
+      return (
+        (it.name || "").toLowerCase().includes(q) ||
+        (it.specifications || "").toLowerCase().includes(q) ||
+        (it.hsn || "").toLowerCase().includes(q)
+      );
+    });
+  }, [items, query]);
+
+  const handleItemClick = (it) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(it.id)) {
+        next.delete(it.id);
+      } else {
+        next.add(it.id);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-60 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-bordergray flex items-center justify-between bg-linear-to-r from-select-blue/5 to-white">
+          <div className="flex items-center gap-2">
+            <span className="h-8 w-8 rounded-lg bg-select-blue/10 text-select-blue flex items-center justify-center">
+              <Package size={14} />
+            </span>
+            <div>
+              <h3 className="text-[13px] font-bold text-textcolor">
+                Pick from Material Master
+              </h3>
+              <p className="text-[10.5px] text-text-muted">
+                Select one or more materials to add to this item
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="text-text-subtle hover:text-textcolor cursor-pointer">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-bordergray">
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, spec, HSN..."
+              className="bg-bg-soft border border-transparent rounded-lg pl-7 pr-3 py-1.5 text-[11.5px] placeholder:text-text-subtle focus:outline-none focus:bg-white focus:border-select-blue/30 w-full"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+          {filtered.length === 0 ? (
+            <p className="text-center text-[11.5px] text-text-subtle py-8">
+              No materials match
+            </p>
+          ) : (
+            filtered.map((it) => {
+              const isSelected = selectedIds.has(it.id);
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => handleItemClick(it)}
+                  className={`w-full text-left rounded-lg border px-3 py-2 transition-all flex items-center gap-3 cursor-pointer ${
+                    isSelected
+                      ? "border-select-blue bg-active-bg/40"
+                      : "border-bordergray bg-white hover:border-select-blue hover:bg-active-bg/30"
+                  }`}
+                >
+                  <div className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                    isSelected ? "border-select-blue bg-select-blue text-white" : "border-bordergray bg-white"
+                  }`}>
+                    {isSelected && <Check size={10} strokeWidth={4} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11.5px] font-semibold text-textcolor truncate">
+                      {it.name}
+                    </p>
+                    {it.specifications && (
+                      <p className="text-[10px] text-text-muted truncate mt-0.5">
+                        {it.specifications}
+                      </p>
+                    )}
+                    <p className="text-[9.5px] text-text-subtle mt-0.5">
+                      HSN: {it.hsn || "—"} · Standard Rate: ₹{Number(it.rate || 0).toLocaleString("en-IN")} / {it.unit}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-bordergray bg-bg-soft flex items-center justify-end gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg border border-bordergray bg-white text-[12px] font-semibold text-text-muted hover:text-textcolor cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const selectedItems = items.filter((it) => selectedIds.has(it.id));
+              onPick(selectedItems);
+            }}
+            disabled={selectedIds.size === 0}
+            className="px-4 py-1.5 rounded-lg bg-linear-to-br from-select-blue to-primary text-white text-[12px] font-semibold shadow-md hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer"
+          >
+            Add Selected ({selectedIds.size})
+          </button>
+        </div>
       </div>
     </div>
   );
