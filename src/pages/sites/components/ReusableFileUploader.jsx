@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { FiPlus, FiAlertCircle, FiLoader } from "react-icons/fi";
+import { storeFile } from "../../../data/fileStorage";
 
 export default function ReusableFileUploader({
   allowedTypes = [],
@@ -47,14 +48,21 @@ export default function ReusableFileUploader({
 
     // Process each valid file (simplified single-file progress or batch upload)
     let progress = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       progress += 20;
       setUploadProgress(progress);
 
       if (progress >= 100) {
         clearInterval(interval);
         
-        validFiles.forEach((file) => {
+        for (const file of validFiles) {
+          const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+          try {
+            await storeFile(fileId, file);
+          } catch (e) {
+            console.error("Failed to store file in IndexedDB:", e);
+          }
+
           let fileUrl = "";
           try {
             fileUrl = URL.createObjectURL(file);
@@ -65,7 +73,7 @@ export default function ReusableFileUploader({
 
           const fileExtension = file.name.split(".").pop().toUpperCase();
           const uploadedFileObject = {
-            id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            id: fileId,
             name: file.name,
             type: fileExtension,
             uploadedBy: uploadedBy,
@@ -89,7 +97,7 @@ export default function ReusableFileUploader({
           if (onUploadSuccess) {
             onUploadSuccess(uploadedFileObject);
           }
-        });
+        }
 
         setIsUploading(false);
         setUploadProgress(0);

@@ -26,6 +26,7 @@ import {
 } from "react-icons/fi";
 import InputField from "../../../components/InputField";
 import ReusableFileUploader from "./ReusableFileUploader";
+import { storeFile } from "../../../data/fileStorage";
 
 const PRESET_THEMES = [
   "Modern",
@@ -44,6 +45,24 @@ const SUPERVISORS_LIST = [
   "Rahul G.",
 ];
 
+const SUGGESTED_ROOMS = [
+  "Pooja Room",
+  "Home Office",
+  "Study Room",
+  "Guest Room",
+  "Walk-in Wardrobe",
+  "Utility Area",
+  "Terrace",
+  "Conference Room",
+  "Living Room",
+  "Kitchen",
+  "Bedroom",
+  "Bathroom",
+  "Balcony",
+  "Dining Area",
+  "Other Spaces"
+];
+
 export default function DesignWorkspace({
   site,
   onSave,
@@ -52,6 +71,7 @@ export default function DesignWorkspace({
 }) {
   // 1. Initialize states from site object or defaults
   const [activeTab, setActiveTab] = useState("default-design"); // default-design, redesign, drawings, approval
+  const [roomModal, setRoomModal] = useState(null);
   const [conceptTitle, setConceptTitle] = useState(
     site.conceptTitle || "Scandinavian Cozy Minimalist",
   );
@@ -65,6 +85,7 @@ export default function DesignWorkspace({
 
   // Notifications state
   const [notifications, setNotifications] = useState([]);
+  const [clientNotifications, setClientNotifications] = useState(site.clientNotifications || []);
 
   // Toast notifier helper
   const addNotification = (message, type = "info") => {
@@ -129,6 +150,9 @@ export default function DesignWorkspace({
       {
         id: "rev-1",
         date: "09.06.2026",
+        createdDate: "09-06-2026",
+        completedDate: "12-06-2026",
+        completedBy: "Priya S.",
         requestedBy: "Client (Ankit)",
         category: "Space Layout",
         description:
@@ -361,6 +385,7 @@ export default function DesignWorkspace({
   const [drawName, setDrawName] = useState("");
   const [drawCategory, setDrawCategory] = useState("2D Drawing");
   const [drawUploadedBy, setDrawUploadedBy] = useState("Priya S.");
+  const [drawVisibleToClient, setDrawVisibleToClient] = useState(true);
 
   const [drawStatus, setDrawStatus] = useState("Draft");
   const [modalDrawingFile, setModalDrawingFile] = useState(null); // Uploaded file in Drawing upload modal
@@ -488,29 +513,8 @@ export default function DesignWorkspace({
   })();
 
   // STAGE 3 (2D/3D Drawings) Completion check
-  const MANDATORY_DRAWINGS = ["Floor Plan", "Furniture Layout", "Electrical Layout", "Ceiling Layout"];
-
-  const missingMandatoryDrawings = MANDATORY_DRAWINGS.filter(
-    (name) => !drawings.some((d) => d.name.toLowerCase().includes(name.toLowerCase())),
-  );
-
-  const hasMandatoryDrawings = missingMandatoryDrawings.length === 0;
-
-  const allMandatoryDrawingsApproved = MANDATORY_DRAWINGS.every((name) =>
-    drawings.some(
-      (d) => d.name.toLowerCase().includes(name.toLowerCase()) && d.status === "Approved",
-    ),
-  );
-
-  const noDrawingInDraftOrUnderReview =
-    drawings.length > 0 &&
-    drawings.every((d) => d.status !== "Draft" && d.status !== "Under Review");
-
   const isDrawingsStageCompleted =
-    drawings.length >= 4 &&
-    hasMandatoryDrawings &&
-    allMandatoryDrawingsApproved &&
-    noDrawingInDraftOrUnderReview;
+    drawings.length > 0 && drawings.every((d) => d.status === "Approved");
 
 
 
@@ -555,6 +559,11 @@ export default function DesignWorkspace({
       : (defaultDesignProgress + drawingsProgress + approvalProgress) / 3,
   );
 
+  const feedbackEndRef = useRef(null);
+  useEffect(() => {
+    feedbackEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [discussionHistory]);
+
   // Save site details with compatibility sync
   useEffect(() => {
     let active = true;
@@ -596,6 +605,7 @@ export default function DesignWorkspace({
       lastReminderSentDate,
       digitalAcknowledgementVerified,
       progress: overallDesignProgress,
+      clientNotifications,
     };
     onSave(updated);
 
@@ -635,7 +645,38 @@ export default function DesignWorkspace({
     lastReminderSentDate,
     digitalAcknowledgementVerified,
     overallDesignProgress,
+    clientNotifications,
   ]);
+
+  // Sync external changes (e.g. from Client Portal) to local workspace states
+  useEffect(() => {
+    if (site) {
+      if (site.revisions && JSON.stringify(site.revisions) !== JSON.stringify(revisions)) {
+        setRevisions(site.revisions);
+      }
+      if (site.discussionHistory && JSON.stringify(site.discussionHistory) !== JSON.stringify(discussionHistory)) {
+        setDiscussionHistory(site.discussionHistory);
+      }
+      if (site.drawings && JSON.stringify(site.drawings) !== JSON.stringify(drawings)) {
+        setDrawings(site.drawings);
+      }
+      if (site.referenceFiles && JSON.stringify(site.referenceFiles) !== JSON.stringify(referenceFiles)) {
+        setReferenceFiles(site.referenceFiles);
+      }
+      if (site.designStatus && site.designStatus !== designStatus) {
+        setDesignStatus(site.designStatus);
+      }
+      if (site.approvalStatus && site.approvalStatus !== approvalStatus) {
+        setApprovalStatus(site.approvalStatus);
+      }
+      if (site.approvalFeedback && site.approvalFeedback !== approvalFeedback) {
+        setApprovalFeedback(site.approvalFeedback);
+      }
+      if (site.clientNotifications && JSON.stringify(site.clientNotifications) !== JSON.stringify(clientNotifications)) {
+        setClientNotifications(site.clientNotifications);
+      }
+    }
+  }, [site]);
 
   // Determine current stage index
   const getCurrentStageIndex = () => {
@@ -669,7 +710,9 @@ export default function DesignWorkspace({
     }
     if (tabKey === "approval" && !isDrawingsStageCompleted) {
       setModalAlert({
-        message: `Required drawings must be approved first. ${missingMandatoryDrawings.length > 0 ? "Mandatory drawings: " + missingMandatoryDrawings.join(", ") : "All uploaded drawings must be reviewed and approved."}`,
+        message: drawings.length === 0
+          ? "Required drawings must be uploaded first."
+          : "All uploaded drawings must be reviewed and approved.",
       });
       return;
     }
@@ -708,6 +751,7 @@ export default function DesignWorkspace({
     const newRev = {
       id: `rev-${Date.now()}`,
       date: dateStr,
+      createdDate: dateStr,
       requestedBy: "Client (Ankit)",
       category: revCategory,
       description: revDescription,
@@ -732,14 +776,51 @@ export default function DesignWorkspace({
     setRevDescription("");
   };
 
-  // Update a revision status
   const handleUpdateRevisionStatus = (id, newStatus) => {
     setRevisions((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)),
+      prev.map((r) => {
+        if (r.id === id) {
+          const updated = { ...r, status: newStatus };
+          if (newStatus === "Completed") {
+            updated.completedDate = new Date().toLocaleDateString("en-IN");
+            updated.completedBy = site.supervisor || "Priya S.";
+          }
+          return updated;
+        }
+        return r;
+      })
     );
     setLastUpdatedRedesign(new Date().toLocaleDateString("en-IN"));
     addActivity(`Revision status updated to ${newStatus}`, "Priya S. (Designer)");
     addNotification(`Revision marked as ${newStatus}`, "success");
+
+    const targetRev = revisions.find(r => r.id === id);
+    const revNum = targetRev ? targetRev.revisionNumber : '';
+    let clientNotifTitle = "";
+    let clientNotifText = "";
+    let clientNotifType = "info";
+
+    if (newStatus === "In Progress") {
+      clientNotifTitle = "Revision Started";
+      clientNotifText = `The design team has started work on Revision ${revNum}.`;
+      clientNotifType = "info";
+    } else if (newStatus === "Completed") {
+      clientNotifTitle = "Revision Completed";
+      clientNotifText = `Revision ${revNum} has been completed. Review the updated files.`;
+      clientNotifType = "success";
+    }
+
+    if (clientNotifTitle) {
+      const newNotif = {
+        id: `notif-${Date.now()}`,
+        title: clientNotifTitle,
+        text: clientNotifText,
+        type: clientNotifType,
+        timestamp: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) + " " + new Date().toLocaleDateString("en-IN"),
+        read: false
+      };
+      setClientNotifications(prev => [...prev, newNotif]);
+    }
   };
 
   // Delete revision attachment handler
@@ -869,7 +950,9 @@ export default function DesignWorkspace({
   const handleSendForApproval = () => {
     if (!isDrawingsStageCompleted) {
       setModalAlert({
-        message: `Cannot submit for approval. ${missingMandatoryDrawings.length > 0 ? "Mandatory drawings: " + missingMandatoryDrawings.join(", ") : "All uploaded drawings must be reviewed and approved."}`,
+        message: drawings.length === 0
+          ? "Cannot submit for approval. Please upload at least one drawing."
+          : "Cannot submit for approval. All uploaded drawings must be reviewed and approved.",
       });
       return;
     }
@@ -1050,6 +1133,7 @@ export default function DesignWorkspace({
                 size: modalDrawingFile.size,
                 uploadDate: dateStr,
                 status: drawStatus,
+                visibleToClient: drawVisibleToClient,
                 versions: [...(d.versions || []), newVerObj],
               }
             : d,
@@ -1072,6 +1156,7 @@ export default function DesignWorkspace({
         reviewer: "",
         reviewDate: "",
         reviewComments: "",
+        visibleToClient: drawVisibleToClient,
         versions: [
           {
             version: "V1",
@@ -1154,7 +1239,7 @@ export default function DesignWorkspace({
     });
   };
 
-  const completeFileReplacement = (file, notes) => {
+  const completeFileReplacement = async (file, notes) => {
     const extension = file.name.split(".").pop().toUpperCase();
     
     // Show upload progress
@@ -1164,19 +1249,65 @@ export default function DesignWorkspace({
     let progress = 0;
     const interval = setInterval(() => {
       progress += 20;
-      setReplacementProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
+      setReplacementProgress((p) => Math.min(p + 20, 100));
+    }, 100);
 
-        const fileUrl = URL.createObjectURL(file);
-        const dateStr = new Date().toLocaleDateString("en-IN");
-        const uploadedBy = site.supervisor || "Alex Sterling";
+    const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    try {
+      await storeFile(fileId, file);
+    } catch (e) {
+      console.error("Failed to store replacement file in IndexedDB:", e);
+    }
 
-        if (replaceTarget.type === "default-design") {
-          setReferenceFiles((prev) =>
-            prev.map((f) => {
-              if (f.id === replaceTarget.id) {
-                const currentVer = parseInt(f.version.replace("V", "")) || 1;
+    clearInterval(interval);
+    setReplacementProgress(100);
+
+    const fileUrl = URL.createObjectURL(file);
+    const dateStr = new Date().toLocaleDateString("en-IN");
+    const uploadedBy = site.supervisor || "Alex Sterling";
+
+    if (replaceTarget.type === "default-design") {
+      setReferenceFiles((prev) =>
+        prev.map((f) => {
+          if (f.id === replaceTarget.id) {
+            const currentVer = parseInt(f.version.replace("V", "")) || 1;
+            const nextVer = `V${currentVer + 1}`;
+            const newVerObj = {
+              version: nextVer,
+              name: file.name,
+              url: fileUrl,
+              uploadedBy,
+              uploadDate: dateStr,
+              fileSize: formatBytes(file.size),
+              size: file.size,
+              changeNotes: notes,
+            };
+            return {
+              ...f,
+              id: fileId,
+              version: nextVer,
+              name: file.name,
+              type: extension,
+              url: fileUrl,
+              size: file.size,
+              uploadedDate: dateStr,
+              versions: [...(f.versions || []), newVerObj],
+            };
+          }
+          return f;
+        }),
+      );
+      setLastUpdatedDefaultDesign(dateStr);
+      addActivity(`Replaced reference file: ${file.name} (${notes})`, uploadedBy);
+      addNotification("Reference file replaced", "success");
+    } else if (replaceTarget.type === "revision-attachment") {
+      setRevisions((prev) =>
+        prev.map((r) => {
+          if (r.id === replaceTarget.revisionId) {
+            const updatedAttachments = r.attachedFiles.map((att) => {
+              if (att.id === replaceTarget.id) {
+                const currentVer =
+                  parseInt(att.version.replace("V", "")) || 1;
                 const nextVer = `V${currentVer + 1}`;
                 const newVerObj = {
                   version: nextVer,
@@ -1189,108 +1320,72 @@ export default function DesignWorkspace({
                   changeNotes: notes,
                 };
                 return {
-                  ...f,
+                  ...att,
+                  id: fileId,
                   version: nextVer,
                   name: file.name,
                   type: extension,
                   url: fileUrl,
                   size: file.size,
                   uploadedDate: dateStr,
-                  versions: [...(f.versions || []), newVerObj],
+                  versions: [...(att.versions || []), newVerObj],
                 };
               }
-              return f;
-            }),
-          );
-          setLastUpdatedDefaultDesign(dateStr);
-          addActivity(`Replaced reference file: ${file.name} (${notes})`, uploadedBy);
-          addNotification("Reference file replaced", "success");
-        } else if (replaceTarget.type === "revision-attachment") {
-          setRevisions((prev) =>
-            prev.map((r) => {
-              if (r.id === replaceTarget.revisionId) {
-                const updatedAttachments = r.attachedFiles.map((att) => {
-                  if (att.id === replaceTarget.id) {
-                    const currentVer =
-                      parseInt(att.version.replace("V", "")) || 1;
-                    const nextVer = `V${currentVer + 1}`;
-                    const newVerObj = {
-                      version: nextVer,
-                      name: file.name,
-                      url: fileUrl,
-                      uploadedBy,
-                      uploadDate: dateStr,
-                      fileSize: formatBytes(file.size),
-                      size: file.size,
-                      changeNotes: notes,
-                    };
-                    return {
-                      ...att,
-                      version: nextVer,
-                      name: file.name,
-                      type: extension,
-                      url: fileUrl,
-                      size: file.size,
-                      uploadedDate: dateStr,
-                      versions: [...(att.versions || []), newVerObj],
-                    };
-                  }
-                  return att;
-                });
-                return { ...r, attachedFiles: updatedAttachments };
-              }
-              return r;
-            }),
-          );
-          setLastUpdatedRedesign(dateStr);
-          addActivity(
-            `Replaced revision attachment in revision ID ${replaceTarget.revisionId} (${notes})`,
-            uploadedBy,
-          );
-          addNotification("Revision attachment replaced", "success");
-        } else if (replaceTarget.type === "drawing") {
-          setDrawings((prev) =>
-            prev.map((d) => {
-              if (d.id === replaceTarget.id) {
-                const currentVer = parseInt(d.version.replace("V", "")) || 1;
-                const nextVer = `V${currentVer + 1}`;
-                const newVerObj = {
-                  version: nextVer,
-                  name: file.name,
-                  url: fileUrl,
-                  uploadedBy,
-                  uploadDate: dateStr,
-                  fileSize: formatBytes(file.size),
-                  size: file.size,
-                  changeNotes: notes,
-                };
-                return {
-                  ...d,
-                  version: nextVer,
-                  fileUrl: fileUrl,
-                  fileSize: formatBytes(file.size),
-                  size: file.size,
-                  uploadDate: dateStr,
-                  status: "Under Review",
-                  versions: [...(d.versions || []), newVerObj],
-                };
-              }
-              return d;
-            }),
-          );
-          setLastUpdatedDrawings(dateStr);
-          addActivity(
-            `Uploaded new drawing version for drawing ID ${replaceTarget.id} (${notes})`,
-            uploadedBy,
-          );
-          addNotification("New drawing version uploaded", "success");
-        }
+              return att;
+            });
+            return { ...r, attachedFiles: updatedAttachments };
+          }
+          return r;
+        }),
+      );
+      setLastUpdatedRedesign(dateStr);
+      addActivity(
+        `Replaced revision attachment in revision ID ${replaceTarget.revisionId} (${notes})`,
+        uploadedBy,
+      );
+      addNotification("Revision attachment replaced", "success");
+    } else if (replaceTarget.type === "drawing") {
+      setDrawings((prev) =>
+        prev.map((d) => {
+          if (d.id === replaceTarget.id) {
+            const currentVer = parseInt(d.version.replace("V", "")) || 1;
+            const nextVer = `V${currentVer + 1}`;
+            const newVerObj = {
+              version: nextVer,
+              name: file.name,
+              url: fileUrl,
+              uploadedBy,
+              uploadDate: dateStr,
+              fileSize: formatBytes(file.size),
+              size: file.size,
+              changeNotes: notes,
+            };
+            return {
+              ...d,
+              id: fileId,
+              version: nextVer,
+              fileUrl: fileUrl,
+              fileSize: formatBytes(file.size),
+              size: file.size,
+              uploadDate: dateStr,
+              status: "Under Review",
+              versions: [...(d.versions || []), newVerObj],
+            };
+          }
+          return d;
+        }),
+      );
+      setLastUpdatedDrawings(dateStr);
+      addActivity(
+        `Uploaded new drawing version for drawing ID ${replaceTarget.id} (${notes})`,
+        uploadedBy,
+      );
+      addNotification("New drawing version uploaded", "success");
+    }
 
-        setReplacementUploading(false);
-        setReplaceTarget(null);
-        setTempReplacementFile(null);
-      }
-    }, 100);
+    setReplacementUploading(false);
+    setReplaceTarget(null);
+    setTempReplacementFile(null);
   };
 
   // Helper to render user mentions in comment text
@@ -1405,7 +1500,9 @@ export default function DesignWorkspace({
     } else if (activeTab === "drawings") {
       if (!isDrawingsStageCompleted) {
         setModalAlert({
-          message: `Cannot submit Drawings stage. ${missingMandatoryDrawings.length > 0 ? "Mandatory drawings missing: " + missingMandatoryDrawings.join(", ") : "All mandatory drawings must be approved and no drawings remain in Draft or Under Review."}`,
+          message: drawings.length === 0
+            ? "Cannot submit Drawings stage. Please upload at least one drawing."
+            : "Cannot submit Drawings stage. All uploaded drawings must be reviewed and approved.",
         });
         return;
       }
@@ -1829,12 +1926,12 @@ export default function DesignWorkspace({
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => {
-                                      const ext = file.type.toLowerCase();
-                                      if (
-                                        ["png", "jpg", "jpeg", "webp"].includes(
-                                          ext,
-                                        )
-                                      ) {
+                                      const ext = (file.name || "").split(".").pop().toLowerCase();
+                                      const isImageExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
+                                      const isBlobImage = file.url && file.url.startsWith("blob:") && ["PNG", "JPG", "JPEG", "WEBP", "GIF"].includes((file.type || "").toUpperCase());
+                                      if (isImageExt || isBlobImage) {
+                                        onExpandPhoto([file.url], 0, file.name);
+                                      } else if (file.url && file.url.startsWith("blob:")) {
                                         onExpandPhoto([file.url], 0, file.name);
                                       } else {
                                         window.open(file.url, "_blank");
@@ -1916,20 +2013,62 @@ export default function DesignWorkspace({
 
                 {/* Room-wise Design Checklist Card */}
                 <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left">
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
+                  <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4 flex-wrap gap-2">
                     <h3 className="text-sm font-bold uppercase tracking-wider text-darkgray">
                       Room-wise Design Checklist
                     </h3>
-                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${roomCompletionAverage === 100 ? "text-emerald-700 bg-emerald-50" : "text-select-blue bg-blue-50"}`}>
-                      {roomCompletionAverage}% Average Completion
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${roomCompletionAverage === 100 ? "text-emerald-700 bg-emerald-50" : "text-select-blue bg-blue-50"}`}>
+                        {roomCompletionAverage}% Average Completion
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRoomModal({
+                            type: "add",
+                            name: "",
+                            percentage: 0,
+                          })
+                        }
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-select-blue hover:bg-blue-900 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                      >
+                        <FiPlus size={13} />
+                        Add Room
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {roomChecklist.map((room, idx) => (
                       <div
-                        key={room.name}
-                        className="p-3 border border-gray-100 bg-palewhite rounded-xl flex flex-col gap-2 transition-all hover:shadow-xs"
+                        key={room.name + "-" + idx}
+                        draggable="true"
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", idx);
+                          e.currentTarget.classList.add("opacity-50");
+                        }}
+                        onDragEnd={(e) => {
+                          e.currentTarget.classList.remove("opacity-50");
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const dragIndex = Number(e.dataTransfer.getData("text/plain"));
+                          const hoverIndex = idx;
+                          if (dragIndex === hoverIndex) return;
+                          
+                          const list = [...roomChecklist];
+                          const draggedItem = list[dragIndex];
+                          list.splice(dragIndex, 1);
+                          list.splice(hoverIndex, 0, draggedItem);
+                          
+                          setRoomChecklist(list);
+                          setLastUpdatedDefaultDesign(new Date().toLocaleDateString("en-IN"));
+                          addActivity("Room checklist reordered", site.supervisor || "Vijay K. (Supervisor)");
+                        }}
+                        className="p-3 border border-gray-100 bg-palewhite rounded-xl flex flex-col gap-2 transition-all hover:shadow-xs cursor-move"
                       >
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-2">
@@ -1943,9 +2082,47 @@ export default function DesignWorkspace({
                               {room.name}
                             </span>
                           </div>
-                          <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded border border-gray-100">
-                            {room.percentage}% Done
-                          </span>
+                          
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded border border-gray-100">
+                              {room.percentage}% Done
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRoomModal({
+                                  type: "edit",
+                                  index: idx,
+                                  room,
+                                  name: room.name,
+                                  percentage: room.percentage,
+                                });
+                              }}
+                              className="p-1 hover:text-select-blue text-gray-450 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+                              title="Edit Room"
+                            >
+                              <FiEdit3 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalConfirm({
+                                  message: `Are you sure you want to delete room "${room.name}"?`,
+                                  onConfirm: () => {
+                                    setRoomChecklist((prev) => prev.filter((_, i) => i !== idx));
+                                    addActivity(`Deleted room: ${room.name}`, site.supervisor || "Alex Sterling");
+                                    setLastUpdatedDefaultDesign(new Date().toLocaleDateString("en-IN"));
+                                  },
+                                });
+                              }}
+                              className="p-1 hover:text-red-500 text-gray-455 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+                              title="Delete Room"
+                            >
+                              <FiTrash2 size={12} />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -2014,7 +2191,7 @@ export default function DesignWorkspace({
                     Revision History
                   </h3>
                   {revisions.length > 0 ? (
-                    <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                    <div className="max-h-[300px] overflow-y-auto overflow-x-auto border border-gray-100 rounded-xl custom-scrollbar">
                       <table className="w-full text-left text-xs text-darkgray cursor-pointer">
                         <thead>
                           <tr className="bg-palewhite border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
@@ -2022,7 +2199,9 @@ export default function DesignWorkspace({
                             <th className="p-3">Requested By</th>
                             <th className="p-3">Affected Rooms</th>
                             <th className="p-3">Priority</th>
-                            <th className="p-3">Date</th>
+                            <th className="p-3">Created Date</th>
+                            <th className="p-3">Completed Date</th>
+                            <th className="p-3">Completed By</th>
                             <th className="p-3">Status</th>
                           </tr>
                         </thead>
@@ -2048,7 +2227,13 @@ export default function DesignWorkspace({
                                 </span>
                               </td>
                               <td className="p-3 text-gray-400 font-semibold">
-                                {rev.date}
+                                {rev.createdDate || rev.date || "—"}
+                              </td>
+                              <td className="p-3 text-gray-400 font-semibold">
+                                {rev.status === "Completed" ? (rev.completedDate || "—") : "—"}
+                              </td>
+                              <td className="p-3 text-gray-550 font-bold">
+                                {rev.status === "Completed" ? (rev.completedBy || "—") : "—"}
                               </td>
                               <td className="p-3">
                                 <span
@@ -2343,6 +2528,7 @@ export default function DesignWorkspace({
                           <th className="p-3">Reviewer & Date</th>
                           <th className="p-3">Status</th>
                           <th className="p-3">Date</th>
+                          <th className="p-3 text-center">Visible to Client</th>
                           <th className="p-3 text-center">Actions</th>
                         </tr>
                       </thead>
@@ -2400,18 +2586,28 @@ export default function DesignWorkspace({
                                 {draw.uploadDate}
                               </td>
                               <td className="p-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={draw.visibleToClient !== false}
+                                  onChange={(e) => {
+                                    const val = e.target.checked;
+                                    setDrawings((prev) =>
+                                      prev.map((d) =>
+                                        d.id === draw.id ? { ...d, visibleToClient: val } : d
+                                      )
+                                    );
+                                  }}
+                                  className="w-4 h-4 rounded text-select-blue focus:ring-select-blue cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-3 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => {
-                                      const ext = draw.fileUrl
-                                        .split(".")
-                                        .pop()
-                                        .toLowerCase();
-                                      if (
-                                        ["png", "jpg", "jpeg", "webp"].includes(
-                                          ext,
-                                        )
-                                      ) {
+                                      const ext = (draw.name || "").split(".").pop().toLowerCase();
+                                      const isImageExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
+                                      const isBlobUrl = draw.fileUrl && draw.fileUrl.startsWith("blob:");
+                                      if (isImageExt || isBlobUrl) {
                                         onExpandPhoto(
                                           [draw.fileUrl],
                                           0,
@@ -2495,18 +2691,28 @@ export default function DesignWorkspace({
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 p-3 bg-blue-50/20 border border-blue-100 rounded-xl text-xs flex flex-col gap-1.5">
-                    <span className="font-bold text-select-blue">Required Drawings Validation:</span>
-                    <p className="text-gray-600">
-                      To complete Drawings stage, upload at least 4 drawings including: <strong className="text-darkgray">Floor Plan, Furniture Layout, Electrical Layout, Ceiling Layout</strong>. All mandatory drawings must be approved.
-                    </p>
-                    {missingMandatoryDrawings.length > 0 ? (
-                      <span className="text-red-650 font-semibold">Missing mandatory drawings: {missingMandatoryDrawings.join(", ")}</span>
-                    ) : allMandatoryDrawingsApproved ? (
-                      <span className="text-emerald-700 font-semibold">✓ All mandatory drawings are approved!</span>
-                    ) : (
-                      <span className="text-amber-700 font-semibold">Awaiting review and approval for all mandatory drawings.</span>
-                    )}
+                  <div className="mt-4 p-4 bg-palewhite border border-gray-100 rounded-xl text-xs">
+                    <h4 className="font-bold text-darkgray uppercase tracking-wider mb-3">Drawings Summary</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white p-3 rounded-lg border border-gray-100 flex flex-col">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Total Drawings</span>
+                        <span className="text-lg font-extrabold text-darkgray mt-1">{drawings.length}</span>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-gray-100 flex flex-col">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Approved Drawings</span>
+                        <span className="text-lg font-extrabold text-emerald-600 mt-1">{drawings.filter(d => d.status === "Approved").length}</span>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-gray-100 flex flex-col">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Pending Review</span>
+                        <span className="text-lg font-extrabold text-amber-600 mt-1">{drawings.filter(d => d.status === "Under Review").length}</span>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-gray-100 flex flex-col">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Latest Upload</span>
+                        <span className="text-xs font-bold text-darkgray mt-2 truncate" title={drawings.length > 0 ? drawings[drawings.length - 1].name : "—"}>
+                          {drawings.length > 0 ? drawings[drawings.length - 1].name : "—"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2693,7 +2899,7 @@ export default function DesignWorkspace({
                   <h3 className="text-sm font-bold uppercase tracking-wider text-darkgray border-b border-gray-100 pb-3 mb-4">
                     Client Feedback Thread
                   </h3>
-                  <div className="space-y-4 max-h-[350px] overflow-y-auto mb-4 p-2 scroll-hidden-bar">
+                  <div className="space-y-4 max-h-[350px] overflow-y-auto mb-4 p-2 custom-scrollbar">
                     {discussionHistory.map((msg, idx) => {
                       const isClient = msg.author.toLowerCase() === "client";
                       return (
@@ -2722,6 +2928,7 @@ export default function DesignWorkspace({
                         </div>
                       );
                     })}
+                    <div ref={feedbackEndRef} />
                   </div>
 
                   <form
@@ -3144,6 +3351,19 @@ export default function DesignWorkspace({
                 )}
               </div>
 
+              <div className="flex items-center gap-2 pt-1 pb-3">
+                <input
+                  type="checkbox"
+                  id="drawVisibleToClient"
+                  checked={drawVisibleToClient}
+                  onChange={(e) => setDrawVisibleToClient(e.target.checked)}
+                  className="w-4 h-4 rounded text-select-blue focus:ring-select-blue cursor-pointer"
+                />
+                <label htmlFor="drawVisibleToClient" className="text-xs font-bold text-darkgray cursor-pointer select-none">
+                  Visible to Client
+                </label>
+              </div>
+
               <button
                 type="submit"
                 disabled={!modalDrawingFile}
@@ -3216,13 +3436,10 @@ export default function DesignWorkspace({
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => {
-                                const ext = v.name
-                                  .split(".")
-                                  .pop()
-                                  .toLowerCase();
-                                if (
-                                  ["png", "jpg", "jpeg", "webp"].includes(ext)
-                                ) {
+                                const ext = (v.name || "").split(".").pop().toLowerCase();
+                                const isImageExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
+                                const isBlobUrl = v.url && v.url.startsWith("blob:");
+                                if (isImageExt || isBlobUrl) {
                                   onExpandPhoto(
                                     [v.url],
                                     0,
@@ -3322,13 +3539,10 @@ export default function DesignWorkspace({
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => {
-                                const ext = v.name
-                                  .split(".")
-                                  .pop()
-                                  .toLowerCase();
-                                if (
-                                  ["png", "jpg", "jpeg", "webp"].includes(ext)
-                                ) {
+                                const ext = (v.name || "").split(".").pop().toLowerCase();
+                                const isImageExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
+                                const isBlobUrl = v.url && v.url.startsWith("blob:");
+                                if (isImageExt || isBlobUrl) {
                                   onExpandPhoto(
                                     [v.url],
                                     0,
@@ -3448,14 +3662,15 @@ export default function DesignWorkspace({
                 </span>
                 <textarea
                   rows={2}
+                  disabled={selectedRevisionForDetails.status === "Awaiting Payment"}
                   value={selectedRevisionForDetails.resolutionNotes || ""}
                   onChange={(e) => {
                     const text = e.target.value;
                     setRevisions(prev => prev.map(r => r.id === selectedRevisionForDetails.id ? { ...r, resolutionNotes: text } : r));
                     setSelectedRevisionForDetails(prev => ({ ...prev, resolutionNotes: text }));
                   }}
-                  placeholder="Enter details on how this request was resolved/addressed..."
-                  className="w-full text-xs bg-light-gray border border-bordergray rounded-xl p-2.5 focus:outline-none focus:border-gray-300 resize-none"
+                  placeholder={selectedRevisionForDetails.status === "Awaiting Payment" ? "Locked: Client payment is awaiting." : "Enter details on how this request was resolved/addressed..."}
+                  className="w-full text-xs bg-light-gray border border-bordergray rounded-xl p-2.5 focus:outline-none focus:border-gray-300 resize-none disabled:opacity-50"
                 />
               </div>
 
@@ -3464,9 +3679,12 @@ export default function DesignWorkspace({
                   <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
                     Resolved / Updated Files
                   </span>
-                  <ReusableFileUploader
-                    allowedTypes={["PDF", "DOC", "DOCX", "JPG", "PNG", "ZIP"]}
-                    maxSizeMB={50}
+                  {selectedRevisionForDetails.status === "Awaiting Payment" ? (
+                    <span className="text-[10px] text-rose-500 font-bold">Upload Disabled (Awaiting Payment)</span>
+                  ) : (
+                    <ReusableFileUploader
+                      allowedTypes={["PDF", "DOC", "DOCX", "JPG", "PNG", "ZIP"]}
+                      maxSizeMB={50}
                     onUploadSuccess={(fileObj) => {
                       const newFile = {
                         ...fileObj,
@@ -3500,6 +3718,7 @@ export default function DesignWorkspace({
                     uploadedBy="Priya S. (Designer)"
                     buttonText="Upload File"
                   />
+                  )}
                 </div>
                 {selectedRevisionForDetails.attachedFiles &&
                 selectedRevisionForDetails.attachedFiles.length > 0 ? (
@@ -3523,10 +3742,10 @@ export default function DesignWorkspace({
                         <div className="flex gap-1">
                           <button
                             onClick={() => {
-                              const ext = file.type.toLowerCase();
-                              if (
-                                ["png", "jpg", "jpeg", "webp"].includes(ext)
-                              ) {
+                              const ext = (file.name || "").split(".").pop().toLowerCase();
+                              const isImageExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
+                              const isBlobUrl = file.url && file.url.startsWith("blob:");
+                              if (isImageExt || isBlobUrl) {
                                 onExpandPhoto([file.url], 0, file.name);
                               } else {
                                 window.open(file.url, "_blank");
@@ -3602,43 +3821,51 @@ export default function DesignWorkspace({
                 <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block mb-2">
                   Action Status
                 </span>
-                <div className="flex gap-2">
-                  {selectedRevisionForDetails.status !== "In Progress" && selectedRevisionForDetails.status !== "Completed" && (
-                    <button
-                      onClick={() => {
-                        handleUpdateRevisionStatus(selectedRevisionForDetails.id, "In Progress");
-                        setSelectedRevisionForDetails(prev => ({ ...prev, status: "In Progress" }));
-                      }}
-                      className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                    >
-                      Mark In Progress
-                    </button>
-                  )}
-                  {selectedRevisionForDetails.status !== "Completed" && (
-                    <button
-                      onClick={() => {
-                        if (!selectedRevisionForDetails.resolutionNotes?.trim()) {
-                          setModalAlert({ message: "Please enter resolution notes detailing the changes made before completing." });
-                          return;
-                        }
-                        if (!selectedRevisionForDetails.attachedFiles || selectedRevisionForDetails.attachedFiles.length === 0) {
-                          setModalAlert({ message: "Please upload at least one updated/resolved drawing file to complete." });
-                          return;
-                        }
-                        handleUpdateRevisionStatus(selectedRevisionForDetails.id, "Completed");
-                        setSelectedRevisionForDetails(prev => ({ ...prev, status: "Completed" }));
-                      }}
-                      className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg cursor-pointer transition-colors"
-                    >
-                      Mark Completed
-                    </button>
-                  )}
-                  {selectedRevisionForDetails.status === "Completed" && (
-                    <span className="text-emerald-700 font-bold flex items-center gap-1">
-                      ✓ Resolved & Completed
-                    </span>
-                  )}
-                </div>
+                {selectedRevisionForDetails.status === "Awaiting Payment" ? (
+                  <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-xl p-3 text-rose-700 font-bold text-xs">
+                    <span className="animate-pulse">⚠️</span>
+                    <span>Blocked: Payment Awaiting</span>
+                    <span className="text-[10px] font-semibold text-rose-500">(Client must clear the additional revision invoice in the portal)</span>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    {selectedRevisionForDetails.status !== "In Progress" && selectedRevisionForDetails.status !== "Completed" && (
+                      <button
+                        onClick={() => {
+                          handleUpdateRevisionStatus(selectedRevisionForDetails.id, "In Progress");
+                          setSelectedRevisionForDetails(prev => ({ ...prev, status: "In Progress" }));
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
+                      >
+                        Mark In Progress
+                      </button>
+                    )}
+                    {selectedRevisionForDetails.status !== "Completed" && (
+                      <button
+                        onClick={() => {
+                          if (!selectedRevisionForDetails.resolutionNotes?.trim()) {
+                            setModalAlert({ message: "Please enter resolution notes detailing the changes made before completing." });
+                            return;
+                          }
+                          if (!selectedRevisionForDetails.attachedFiles || selectedRevisionForDetails.attachedFiles.length === 0) {
+                            setModalAlert({ message: "Please upload at least one updated/resolved drawing file to complete." });
+                            return;
+                          }
+                          handleUpdateRevisionStatus(selectedRevisionForDetails.id, "Completed");
+                          setSelectedRevisionForDetails(prev => ({ ...prev, status: "Completed" }));
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg cursor-pointer transition-colors"
+                      >
+                        Mark Completed
+                      </button>
+                    )}
+                    {selectedRevisionForDetails.status === "Completed" && (
+                      <span className="text-emerald-700 font-bold flex items-center gap-1">
+                        ✓ Resolved & Completed
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -3736,6 +3963,111 @@ export default function DesignWorkspace({
               setModalPrompt(null);
             }}
           />
+        </div>
+      )}
+
+      {/* ROOM CHECKLIST ADD/EDIT MODAL */}
+      {roomModal && (
+        <div className="fixed inset-0 z-150 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 border border-gray-100 flex flex-col text-left">
+            <h4 className="text-sm font-bold text-darkgray uppercase tracking-wider mb-3">
+              {roomModal.type === "add" ? "Add New Room / Space" : "Edit Room / Space"}
+            </h4>
+            
+            <div className="space-y-4 mb-6 text-xs">
+              {/* Room Name Input */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-darkgray mb-1">
+                  Room Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter space name (e.g. Pooja Room)"
+                  value={roomModal.name}
+                  onChange={(e) => setRoomModal({ ...roomModal, name: e.target.value })}
+                  className="w-full text-xs bg-light-gray border border-bordergray rounded-xl px-4 py-2.5 focus:outline-none focus:border-gray-300 font-semibold"
+                />
+                
+                {/* Suggestions List */}
+                <div className="mt-2 flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto custom-scrollbar p-1.5 bg-gray-50 rounded-lg">
+                  {SUGGESTED_ROOMS.filter(r => !roomChecklist.some(item => item.name.toLowerCase() === r.toLowerCase()) || (roomModal.type === 'edit' && roomModal.room.name.toLowerCase() === r.toLowerCase())).map((suggested) => (
+                    <button
+                      key={suggested}
+                      type="button"
+                      onClick={() => setRoomModal({ ...roomModal, name: suggested })}
+                      className="px-2 py-1 text-[10px] bg-white border border-gray-200 rounded hover:bg-select-blue hover:text-white transition-all cursor-pointer font-bold text-gray-500"
+                    >
+                      {suggested}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Progress Slider */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-darkgray">
+                    Completion Progress
+                  </label>
+                  <span className="text-xs font-bold text-select-blue">{roomModal.percentage}%</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="10"
+                    value={roomModal.percentage}
+                    onChange={(e) => setRoomModal({ ...roomModal, percentage: Number(e.target.value) })}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-select-blue"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 w-full justify-end">
+              <button
+                onClick={() => setRoomModal(null)}
+                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-darkgray rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!roomModal.name.trim()) return;
+                  if (roomModal.type === "add") {
+                    const newRoom = {
+                      name: roomModal.name.trim(),
+                      percentage: roomModal.percentage,
+                      completed: roomModal.percentage === 100,
+                    };
+                    setRoomChecklist((prev) => [...prev, newRoom]);
+                    addActivity(`Added room: ${newRoom.name}`, site.supervisor || "Alex Sterling");
+                  } else {
+                    setRoomChecklist((prev) =>
+                      prev.map((item, i) =>
+                        i === roomModal.index
+                          ? {
+                              ...item,
+                              name: roomModal.name.trim(),
+                              percentage: roomModal.percentage,
+                              completed: roomModal.percentage === 100,
+                            }
+                          : item,
+                      ),
+                    );
+                    addActivity(`Updated room details: ${roomModal.name}`, site.supervisor || "Alex Sterling");
+                  }
+                  setLastUpdatedDefaultDesign(new Date().toLocaleDateString("en-IN"));
+                  setRoomModal(null);
+                }}
+                disabled={!roomModal.name.trim()}
+                className="px-5 py-2.5 bg-select-blue hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                {roomModal.type === "add" ? "Add Room" : "Save Changes"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

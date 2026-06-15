@@ -146,6 +146,19 @@ const ClientProfile = () => {
 
   const [associatedLead, setAssociatedLead] = useState(null);
 
+  const [revisionSettings, setRevisionSettings] = useState(() => {
+    const saved = localStorage.getItem(`client_portal_settings_${id}`);
+    if (saved) return JSON.parse(saved);
+    const globalSaved = localStorage.getItem("client_portal_settings");
+    if (globalSaved) return JSON.parse(globalSaved);
+    return {
+      freeRevisionLimit: 3,
+      additionalRevisionCost: 5000,
+      gstPercentage: 18,
+      turnaroundDuration: 5,
+    };
+  });
+
   useEffect(() => {
     if (!client) return;
     const savedLeads = localStorage.getItem("newLeadsData");
@@ -366,6 +379,12 @@ const ClientProfile = () => {
             </Link>
           )}
           <Link
+            to={`/client/dashboard/${client.clientID}`}
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl text-sm font-semibold shadow-sm transition-all"
+          >
+            View Client Portal
+          </Link>
+          <Link
             to="/projects"
             className="flex items-center gap-2 px-5 py-2.5 bg-active-bg text-select-blue rounded-xl text-sm font-semibold hover:bg-blue-100 shadow-sm transition-all"
           >
@@ -449,6 +468,72 @@ const ClientProfile = () => {
                 <p className="text-sm font-bold text-gray-800 uppercase">
                   {client.propertyType || associatedLead?.propertyType || client.location || "Apartment"}
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Design Revision Configuration */}
+          <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] p-6 shrink-0 text-left">
+            <h3 className="flex items-center gap-2 text-[16px] font-bold text-darkgray border-b border-gray-100 pb-3 mb-4">
+              <FiLayers className="text-gray-500" /> Design Revision Configuration
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100/50">
+                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Free Revision Limit</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={revisionSettings.freeRevisionLimit}
+                  onChange={(e) => {
+                    const updated = { ...revisionSettings, freeRevisionLimit: parseInt(e.target.value) || 0 };
+                    setRevisionSettings(updated);
+                    localStorage.setItem(`client_portal_settings_${id}`, JSON.stringify(updated));
+                  }}
+                  className="w-full text-xs font-bold text-slate-800 bg-white border border-bordergray rounded-lg px-2 py-1.5 focus:outline-none focus:border-purple"
+                />
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100/50">
+                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Additional Cost (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={revisionSettings.additionalRevisionCost}
+                  onChange={(e) => {
+                    const updated = { ...revisionSettings, additionalRevisionCost: parseInt(e.target.value) || 0 };
+                    setRevisionSettings(updated);
+                    localStorage.setItem(`client_portal_settings_${id}`, JSON.stringify(updated));
+                  }}
+                  className="w-full text-xs font-bold text-slate-800 bg-white border border-bordergray rounded-lg px-2 py-1.5 focus:outline-none focus:border-purple"
+                />
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100/50">
+                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">GST Percentage (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={revisionSettings.gstPercentage}
+                  onChange={(e) => {
+                    const updated = { ...revisionSettings, gstPercentage: parseInt(e.target.value) || 0 };
+                    setRevisionSettings(updated);
+                    localStorage.setItem(`client_portal_settings_${id}`, JSON.stringify(updated));
+                  }}
+                  className="w-full text-xs font-bold text-slate-800 bg-white border border-bordergray rounded-lg px-2 py-1.5 focus:outline-none focus:border-purple"
+                />
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100/50">
+                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Turnaround (Days)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={revisionSettings.turnaroundDuration}
+                  onChange={(e) => {
+                    const updated = { ...revisionSettings, turnaroundDuration: parseInt(e.target.value) || 0 };
+                    setRevisionSettings(updated);
+                    localStorage.setItem(`client_portal_settings_${id}`, JSON.stringify(updated));
+                  }}
+                  className="w-full text-xs font-bold text-slate-800 bg-white border border-bordergray rounded-lg px-2 py-1.5 focus:outline-none focus:border-purple"
+                />
               </div>
             </div>
           </div>
