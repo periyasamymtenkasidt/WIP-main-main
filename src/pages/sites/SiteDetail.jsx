@@ -17,6 +17,7 @@ import {
   FiCheckCircle,
   FiAlertTriangle,
   FiMail,
+  FiFileText,
 } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa6";
 
@@ -28,6 +29,7 @@ import {
   SUPERVISORS,
   SITE_STATUSES,
 } from "../../data/siteStorage";
+import { resolveSiteFileUrls } from "../../data/fileStorage";
 import InputField from "../../components/InputField";
 import ClientAvatar from "../../assets/images/Client_avatar.png";
 import DesignWorkspace from "./components/DesignWorkspace";
@@ -105,23 +107,21 @@ const SiteDetail = () => {
   };
 
   useEffect(() => {
-    const data = getSite(id);
-    if (data) {
-      setTimeout(() => {
-        setSite(data);
-        setEditStatus(data.status || "");
-        setEditProgress(data.progress || 0);
-        setEditSupervisor(data.supervisor || "");
-        setEditTargetDate(data.targetDate || "");
-        setEditNotes(data.notes || "");
-        setEditAddress(data.fullAddress || "");
-        setLoading(false);
-      }, 0);
-    } else {
-      setTimeout(() => {
-        setLoading(false);
-      }, 0);
-    }
+    const loadSiteData = async () => {
+      const data = getSite(id);
+      if (data) {
+        const resolved = await resolveSiteFileUrls(data);
+        setSite(resolved);
+        setEditStatus(resolved.status || "");
+        setEditProgress(resolved.progress || 0);
+        setEditSupervisor(resolved.supervisor || "");
+        setEditTargetDate(resolved.targetDate || "");
+        setEditNotes(resolved.notes || "");
+        setEditAddress(resolved.fullAddress || "");
+      }
+      setLoading(false);
+    };
+    loadSiteData();
   }, [id]);
 
   // Load survey media from API
@@ -165,7 +165,8 @@ const SiteDetail = () => {
     };
 
     saveSite(updatedSite);
-    setSite(updatedSite);
+    const resolved = await resolveSiteFileUrls(updatedSite);
+    setSite(resolved);
     setIsSaving(false);
     setIsEditingDetails(false);
   };
@@ -174,9 +175,10 @@ const SiteDetail = () => {
     setLightboxImg({ images, currentIndex: initialIdx, title });
   };
 
-  const handleDesignWorkspaceSave = (updatedSite) => {
+  const handleDesignWorkspaceSave = async (updatedSite) => {
     saveSite(updatedSite);
-    setSite(updatedSite);
+    const resolved = await resolveSiteFileUrls(updatedSite);
+    setSite(resolved);
   };
 
   if (loading) {
@@ -832,13 +834,50 @@ const SiteDetail = () => {
             </button>
           )}
 
-          {/* Active Image */}
-          <img
-            src={lightboxImg.images[lightboxImg.currentIndex]}
-            alt={`${lightboxImg.title} view`}
-            className="max-w-[95vw] max-h-[85vh] object-contain rounded-lg shadow-2xl transition-transform duration-300"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {/* Active File Preview */}
+          <div onClick={(e) => e.stopPropagation()} className="max-w-[95vw] max-h-[80vh] w-full flex items-center justify-center">
+            {(() => {
+              const url = lightboxImg.images[lightboxImg.currentIndex];
+              const ext = (url || "").split("?")[0].split(".").pop().toLowerCase();
+              const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) || url.startsWith("blob:") || url.startsWith("data:image/");
+              const isPdf = ext === "pdf" || url.includes("pdf");
+              
+              if (isImage) {
+                return (
+                  <img
+                    src={url}
+                    alt={`${lightboxImg.title} view`}
+                    className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl transition-transform duration-300"
+                  />
+                );
+              } else if (isPdf) {
+                return (
+                  <iframe
+                    src={url}
+                    title={lightboxImg.title}
+                    className="w-full h-[70vh] max-w-4xl rounded-lg shadow-2xl bg-white border border-slate-200"
+                  />
+                );
+              } else {
+                return (
+                  <div className="bg-white rounded-2xl p-8 max-w-md w-full text-center flex flex-col items-center border border-gray-200 shadow-2xl">
+                    <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-select-blue mb-4">
+                      <FiFileText size={32} />
+                    </div>
+                    <h4 className="text-sm font-bold text-darkgray mb-2">{lightboxImg.title || "Document File"}</h4>
+                    <p className="text-xs text-gray-400 mb-6">Preview not available for this document type.</p>
+                    <a
+                      href={url}
+                      download={lightboxImg.title || "document"}
+                      className="px-6 py-2.5 bg-select-blue text-white font-semibold rounded-xl text-xs hover:bg-blue-950 transition-all cursor-pointer shadow-sm"
+                    >
+                      Download File
+                    </a>
+                  </div>
+                );
+              }
+            })()}
+          </div>
 
           {/* Right Arrow */}
           {lightboxImg.images?.length > 1 && (
