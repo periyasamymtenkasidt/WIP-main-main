@@ -48,7 +48,9 @@ const AddSiteModal = ({ onClose, onSubmit, isSaving, SUPERVISORS = [] }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!clientName || !propertyPreset || !siteType || !location) {
-      alert("Please fill in Client Name, Property Preset, Site Type, and Location.");
+      alert(
+        "Please fill in Client Name, Property Preset, Site Type, and Location.",
+      );
       return;
     }
     onSubmit({

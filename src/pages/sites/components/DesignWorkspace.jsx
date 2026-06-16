@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   FiCheck,
   FiX,
@@ -26,6 +26,9 @@ import {
 } from "react-icons/fi";
 import InputField from "../../../components/InputField";
 import ReusableFileUploader from "./ReusableFileUploader";
+import { storeFile, getFile, deleteFile } from "../../../utils/fileStorage";
+import SearchableSelect from "../../../components/SearchableSelect";
+import { getRoomCategories } from "../../../data/scheduleConfig";
 
 const PRESET_THEMES = [
   "Modern",
@@ -65,6 +68,9 @@ export default function DesignWorkspace({
 
   // Notifications state
   const [notifications, setNotifications] = useState([]);
+  const [clientNotifications, setClientNotifications] = useState(
+    site.clientNotifications || [],
+  );
 
   // Toast notifier helper
   const addNotification = (message, type = "info") => {
@@ -93,6 +99,7 @@ export default function DesignWorkspace({
       version: "V1",
       url: img,
       size: 1542000,
+      category: idx === 0 ? "Living Room" : "Kitchen",
       versions: [
         {
           version: "V1",
@@ -103,10 +110,184 @@ export default function DesignWorkspace({
           fileSize: "1.5 MB",
           size: 1542000,
           changeNotes: "Initial file upload sync.",
-        }
-      ]
+        },
+      ],
     }));
   });
+
+  // Reference File Upload Modal states
+  const [showRefUploadModal, setShowRefUploadModal] = useState(false);
+  const [refUploadCategory, setRefUploadCategory] = useState("");
+  const [refUploadFiles, setRefUploadFiles] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleRefDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleRefDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleRefDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleRefDropFiles = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFilesToQueue(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileSelectChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addFilesToQueue(e.target.files);
+    }
+  };
+
+  const addFilesToQueue = (files) => {
+    const allowedTypes = ["JPG", "JPEG", "PNG", "WEBP", "PDF", "DOC", "DOCX"];
+    const maxSizeMB = 50;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const extension = file.name.split(".").pop().toUpperCase();
+      const fileSizeMB = file.size / (1024 * 1024);
+      const fileId = `ref-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+      // Validate type
+      if (!allowedTypes.includes(extension)) {
+        addNotification(`Unsupported file type: .${extension.toLowerCase()}`, "error");
+        continue;
+      }
+
+      // Validate size
+      if (fileSizeMB > maxSizeMB) {
+        addNotification(`File size exceeds 50MB`, "error");
+        continue;
+      }
+
+      // Generate preview URL
+      let fileUrl = "";
+      try {
+        fileUrl = URL.createObjectURL(file);
+      } catch (e) {
+        fileUrl = "/survey_living_room.png";
+      }
+
+      const newQueuedFile = {
+        id: fileId,
+        file: file,
+        name: file.name,
+        type: extension,
+        size: file.size,
+        url: fileUrl,
+        status: "uploading",
+        progress: 0,
+      };
+
+      setRefUploadFiles((prev) => [...prev, newQueuedFile]);
+      simulateUpload(newQueuedFile);
+    }
+  };
+
+  const simulateUpload = (queuedFile) => {
+    let progress = 0;
+    const interval = setInterval(async () => {
+      progress += 25;
+      setRefUploadFiles((prev) =>
+        prev.map((f) => (f.id === queuedFile.id ? { ...f, progress } : f))
+      );
+
+      if (progress >= 100) {
+        clearInterval(interval);
+        try {
+          await storeFile(queuedFile.id, queuedFile.file);
+          await storeFile(`${queuedFile.id}-V1`, queuedFile.file);
+        } catch (e) {
+          console.error("IndexedDB store failed:", e);
+        }
+
+        setRefUploadFiles((prev) =>
+          prev.map((f) =>
+            f.id === queuedFile.id ? { ...f, status: "success" } : f
+          )
+        );
+      }
+    }, 100);
+  };
+
+  const handleRemoveQueuedFile = (id) => {
+    setRefUploadFiles((prev) => prev.filter((f) => f.id !== id));
+    deleteFile(id);
+  };
+
+  const handleSaveReferenceFiles = (e) => {
+    if (e) e.preventDefault();
+    if (!refUploadCategory) {
+      addNotification("Please select a category.", "error");
+      return;
+    }
+    const successFiles = refUploadFiles.filter((f) => f.status === "success");
+    if (successFiles.length === 0) {
+      addNotification("Please upload at least one file.", "error");
+      return;
+    }
+
+    const dateStr = new Date().toLocaleDateString("en-IN");
+    const uploadedBy = site.supervisor || "Alex Sterling";
+
+    const newFilesObjects = successFiles.map((f) => ({
+      id: f.id,
+      name: f.name,
+      type: f.type,
+      uploadedBy: uploadedBy,
+      uploadedDate: dateStr,
+      category: refUploadCategory,
+      version: "V1",
+      size: f.size,
+      url: f.url,
+      versions: [
+        {
+          version: "V1",
+          name: f.name,
+          url: f.url,
+          uploadedBy: uploadedBy,
+          uploadDate: dateStr,
+          fileSize: formatBytes(f.size),
+          size: f.size,
+          changeNotes: "Initial file upload.",
+        },
+      ],
+    }));
+
+    setReferenceFiles((prev) => [...prev, ...newFilesObjects]);
+    setLastUpdatedDefaultDesign(dateStr);
+    addActivity(
+      `Uploaded ${successFiles.length} reference file(s) for category "${refUploadCategory}"`,
+      uploadedBy,
+    );
+    addNotification("Reference files saved successfully", "success");
+
+    // Reset and close
+    setShowRefUploadModal(false);
+    setRefUploadCategory("");
+    setRefUploadFiles([]);
+  };
+
+  const isSaveDisabled =
+    !refUploadCategory ||
+    refUploadFiles.filter((f) => f.status === "success").length === 0;
 
   const [designStatus, setDesignStatus] = useState(
     site.designStatus || "In Progress",
@@ -162,8 +343,8 @@ export default function DesignWorkspace({
               fileSize: "450 KB",
               size: 450000,
               changeNotes: "Initial client feedback attachment.",
-            }
-          ]
+            },
+          ],
         },
       ],
     }));
@@ -320,18 +501,15 @@ export default function DesignWorkspace({
   const [approvalHistory, setApprovalHistory] = useState(
     site.approvalHistory || [],
   );
-  const [approvalNotes, setApprovalNotes] = useState(
-    site.approvalNotes || "",
-  );
+  const [approvalNotes, setApprovalNotes] = useState(site.approvalNotes || "");
   const [remindersSentCount, setRemindersSentCount] = useState(
     site.remindersSentCount || 0,
   );
   const [lastReminderSentDate, setLastReminderSentDate] = useState(
     site.lastReminderSentDate || "",
   );
-  const [digitalAcknowledgementVerified, setDigitalAcknowledgementVerified] = useState(
-    site.digitalAcknowledgementVerified || false,
-  );
+  const [digitalAcknowledgementVerified, setDigitalAcknowledgementVerified] =
+    useState(site.digitalAcknowledgementVerified || false);
 
   // Form states
   const [newComment, setNewComment] = useState("");
@@ -339,6 +517,48 @@ export default function DesignWorkspace({
   const [commentAttachments, setCommentAttachments] = useState([]);
   const [newFeedback, setNewFeedback] = useState("");
   const [feedbackAuthor, setFeedbackAuthor] = useState("Designer");
+
+  // Refs for auto-scrolling
+  const internalCommentsBottomRef = useRef(null);
+  const clientFeedbackBottomRef = useRef(null);
+
+  // Room checklist customization states
+  const [draggedRoomName, setDraggedRoomName] = useState(null);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [showAddRoom, setShowAddRoom] = useState(false);
+  const [editingRoomIdx, setEditingRoomIdx] = useState(null);
+  const [editingRoomName, setEditingRoomName] = useState("");
+
+  // Drawing name options state
+  const [drawingNameOptions, setDrawingNameOptions] = useState(() => {
+    const defaults = [
+      "Floor Plan",
+      "Furniture Layout",
+      "Electrical Layout",
+      "Ceiling Layout",
+      "Living Room Render",
+      "Kitchen Render",
+      "Bedroom Render",
+      "Bathroom Render",
+    ];
+    const existingNames = (site.drawings || []).map((d) => d.name);
+    const uniqueNames = new Set([...defaults, ...existingNames]);
+    return Array.from(uniqueNames);
+  });
+  const [showAddNewDrawNamePopover, setShowAddNewDrawNamePopover] = useState(false);
+  const [newCustomDrawName, setNewCustomDrawName] = useState("");
+  const [customDrawNameError, setCustomDrawNameError] = useState("");
+
+  // Get all unique categories that currently have at least one uploaded reference file
+  const categoriesWithFiles = useMemo(() => {
+    const cats = new Set();
+    referenceFiles.forEach((file) => {
+      if (file.category) {
+        cats.add(file.category);
+      }
+    });
+    return Array.from(cats);
+  }, [referenceFiles]);
 
   // Alert/Confirm/Prompt modal states
   const [modalAlert, setModalAlert] = useState(null);
@@ -361,6 +581,7 @@ export default function DesignWorkspace({
   const [drawName, setDrawName] = useState("");
   const [drawCategory, setDrawCategory] = useState("2D Drawing");
   const [drawUploadedBy, setDrawUploadedBy] = useState("Priya S.");
+  const [drawVisibleToClient, setDrawVisibleToClient] = useState(true);
 
   const [drawStatus, setDrawStatus] = useState("Draft");
   const [modalDrawingFile, setModalDrawingFile] = useState(null); // Uploaded file in Drawing upload modal
@@ -371,9 +592,9 @@ export default function DesignWorkspace({
   const [selectedReferenceFileForHistory, setSelectedReferenceFileForHistory] =
     useState(null);
 
-
   // Drawing Review process state
-  const [selectedDrawingForReview, setSelectedDrawingForReview] = useState(null);
+  const [selectedDrawingForReview, setSelectedDrawingForReview] =
+    useState(null);
 
   // File replacement helper states
   const [replaceTarget, setReplaceTarget] = useState(null); // { type: "default-design"|"revision-attachment"|"drawing", id, revisionId }
@@ -387,6 +608,289 @@ export default function DesignWorkspace({
   const [unreadCommentCount] = useState(2);
   const [activeReplyCommentId, setActiveReplyCommentId] = useState(null);
   const [replyText, setReplyText] = useState("");
+
+  const [localUrls, setLocalUrls] = useState({});
+
+  // Sync state when parent site updates (e.g. from client portal actions or site switching)
+  useEffect(() => {
+    if (!site) return;
+
+    setConceptTitle((prev) =>
+      prev !== site.conceptTitle
+        ? site.conceptTitle || "Scandinavian Haven"
+        : prev,
+    );
+    setThemeSelection((prev) =>
+      prev !== site.themeSelection
+        ? site.themeSelection || "Scandinavian"
+        : prev,
+    );
+    setDesignNotes((prev) =>
+      prev !== site.designNotes ? site.designNotes || "" : prev,
+    );
+    setClientNotifications((prev) =>
+      JSON.stringify(prev) !== JSON.stringify(site.clientNotifications)
+        ? site.clientNotifications || []
+        : prev,
+    );
+
+    if (site.drawings && site.drawings.length > 0) {
+      setDrawings((prev) => {
+        const hasDiff =
+          prev.length !== site.drawings.length ||
+          prev.some((d, i) => {
+            const sd = site.drawings[i];
+            return (
+              !sd ||
+              d.status !== sd.status ||
+              d.reviewer !== sd.reviewer ||
+              d.reviewComments !== sd.reviewComments
+            );
+          });
+        if (hasDiff) {
+          return site.drawings.map((sd, i) => {
+            const prevDraw = prev[i];
+            return prevDraw ? { ...sd, notified: prevDraw.notified } : sd;
+          });
+        }
+        return prev;
+      });
+    }
+
+    setDesignStatus((prev) =>
+      prev !== site.designStatus ? site.designStatus || "In Progress" : prev,
+    );
+    setRoomChecklist((prev) => {
+      const nextList = site.roomChecklist || [];
+      const updated = [...nextList];
+      categoriesWithFiles.forEach((cat) => {
+        if (!updated.some((r) => r.name === cat)) {
+          const prevItem = prev.find((r) => r.name === cat);
+          updated.push(
+            prevItem || {
+              name: cat,
+              completed: false,
+              percentage: 0,
+            },
+          );
+        }
+      });
+      return JSON.stringify(prev) !== JSON.stringify(updated) ? updated : prev;
+    });
+    setRevisions((prev) =>
+      JSON.stringify(prev) !== JSON.stringify(site.revisions)
+        ? site.revisions || []
+        : prev,
+    );
+    setInternalComments((prev) =>
+      JSON.stringify(prev) !== JSON.stringify(site.internalComments)
+        ? site.internalComments || []
+        : prev,
+    );
+    setApprovalStatus((prev) =>
+      prev !== site.approvalStatus ? site.approvalStatus || "Pending" : prev,
+    );
+    setApprovalSubmittedDate((prev) =>
+      prev !== site.approvalSubmittedDate
+        ? site.approvalSubmittedDate || ""
+        : prev,
+    );
+    setApprovalFeedback((prev) =>
+      prev !== site.approvalFeedback ? site.approvalFeedback || "" : prev,
+    );
+
+    setDiscussionHistory((prev) => {
+      if (JSON.stringify(prev) !== JSON.stringify(site.discussionHistory)) {
+        return site.discussionHistory || [];
+      }
+      return prev;
+    });
+
+    setChangeSummary((prev) =>
+      prev !== site.changeSummary ? site.changeSummary || "" : prev,
+    );
+
+    setActivities((prev) => {
+      if (JSON.stringify(prev) !== JSON.stringify(site.activities)) {
+        return site.activities || [];
+      }
+      return prev;
+    });
+
+    setLastUpdatedDefaultDesign((prev) =>
+      prev !== site.lastUpdatedDefaultDesign
+        ? site.lastUpdatedDefaultDesign || "10.06.2026"
+        : prev,
+    );
+    setLastUpdatedRedesign((prev) =>
+      prev !== site.lastUpdatedRedesign
+        ? site.lastUpdatedRedesign || "10.06.2026"
+        : prev,
+    );
+    setLastUpdatedDrawings((prev) =>
+      prev !== site.lastUpdatedDrawings
+        ? site.lastUpdatedDrawings || "10.06.2026"
+        : prev,
+    );
+    setLastUpdatedApproval((prev) =>
+      prev !== site.lastUpdatedApproval
+        ? site.lastUpdatedApproval || "10.06.2026"
+        : prev,
+    );
+    setApprovalHistory((prev) =>
+      JSON.stringify(prev) !== JSON.stringify(site.approvalHistory)
+        ? site.approvalHistory || []
+        : prev,
+    );
+    setApprovalNotes((prev) =>
+      prev !== site.approvalNotes ? site.approvalNotes || "" : prev,
+    );
+    setRemindersSentCount((prev) =>
+      prev !== site.remindersSentCount ? site.remindersSentCount || 0 : prev,
+    );
+    setLastReminderSentDate((prev) =>
+      prev !== site.lastReminderSentDate
+        ? site.lastReminderSentDate || ""
+        : prev,
+    );
+    setDigitalAcknowledgementVerified((prev) =>
+      prev !== site.digitalAcknowledgementVerified
+        ? site.digitalAcknowledgementVerified || false
+        : prev,
+    );
+  }, [site]);
+
+  // Trigger toast notifications for newly rejected designs
+  useEffect(() => {
+    let updated = false;
+    const nextDrawings = drawings.map((d) => {
+      if (d.status === "Rejected" && !d.notified) {
+        addNotification(
+          `Rejection Alert - Project Site: ${site.siteID} | Asset: ${d.name} | Client: ${site.clientName} | Reason: "${d.reviewComments || "No reason"}"`,
+          "error",
+        );
+        updated = true;
+        return { ...d, notified: true };
+      }
+      return d;
+    });
+    if (updated) {
+      setDrawings(nextDrawings);
+    }
+  }, [drawings, site.siteID, site.clientName]);
+
+  useEffect(() => {
+    const loadLocalFiles = async () => {
+      const urls = { ...localUrls };
+      let updated = false;
+
+      // 1. drawings
+      for (const d of drawings) {
+        if (d.id && !urls[d.id]) {
+          const file = await getFile(d.id);
+          if (file) {
+            urls[d.id] = URL.createObjectURL(file);
+            updated = true;
+          }
+        }
+        if (d.versions) {
+          for (const ver of d.versions) {
+            const verKey = `${d.id}-${ver.version}`;
+            if (!urls[verKey]) {
+              const file = await getFile(verKey);
+              if (file) {
+                urls[verKey] = URL.createObjectURL(file);
+                updated = true;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. referenceFiles
+      for (const f of referenceFiles) {
+        if (f.id && !urls[f.id]) {
+          const file = await getFile(f.id);
+          if (file) {
+            urls[f.id] = URL.createObjectURL(file);
+            updated = true;
+          }
+        }
+        if (f.versions) {
+          for (const ver of f.versions) {
+            const verKey = `${f.id}-${ver.version}`;
+            if (!urls[verKey]) {
+              const file = await getFile(verKey);
+              if (file) {
+                urls[verKey] = URL.createObjectURL(file);
+                updated = true;
+              }
+            }
+          }
+        }
+      }
+
+      // 3. revisions attachedFiles
+      for (const rev of revisions) {
+        if (rev.attachedFiles) {
+          for (const f of rev.attachedFiles) {
+            if (f.id && !urls[f.id]) {
+              const file = await getFile(f.id);
+              if (file) {
+                urls[f.id] = URL.createObjectURL(file);
+                updated = true;
+              }
+            }
+          }
+        }
+      }
+
+      // 4. internalComments attachments
+      if (internalComments) {
+        for (const c of internalComments) {
+          if (c.attachments) {
+            for (const f of c.attachments) {
+              if (f.id && !urls[f.id]) {
+                const file = await getFile(f.id);
+                if (file) {
+                  urls[f.id] = URL.createObjectURL(file);
+                  updated = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 5. discussionHistory attachments
+      if (discussionHistory) {
+        for (const c of discussionHistory) {
+          if (c.attachments) {
+            for (const f of c.attachments) {
+              if (f.id && !urls[f.id]) {
+                const file = await getFile(f.id);
+                if (file) {
+                  urls[f.id] = URL.createObjectURL(file);
+                  updated = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (updated) {
+        setLocalUrls(urls);
+      }
+    };
+    loadLocalFiles();
+  }, [
+    drawings,
+    referenceFiles,
+    revisions,
+    internalComments,
+    discussionHistory,
+  ]);
 
   // Auto-save message indicator
   const [saveStatus, setSaveStatus] = useState("Draft Saved");
@@ -415,11 +919,36 @@ export default function DesignWorkspace({
     setActivities((prev) => [{ text: `${text} by ${user}`, time }, ...prev]);
   };
 
+
+  // Ensure every category with files exists in the master roomChecklist state
+  useEffect(() => {
+    setRoomChecklist((prev) => {
+      let changed = false;
+      const updated = [...prev];
+      categoriesWithFiles.forEach((cat) => {
+        if (!updated.some((r) => r.name === cat)) {
+          updated.push({
+            name: cat,
+            completed: false,
+            percentage: 0,
+          });
+          changed = true;
+        }
+      });
+      return changed ? updated : prev;
+    });
+  }, [categoriesWithFiles]);
+
+  // Only display categories that currently have reference files
+  const visibleRoomChecklist = useMemo(() => {
+    return roomChecklist.filter((room) => categoriesWithFiles.includes(room.name));
+  }, [roomChecklist, categoriesWithFiles]);
+
   // Toggle checklist item
-  const handleToggleChecklist = (idx) => {
+  const handleToggleChecklist = (roomName) => {
     setRoomChecklist((prev) =>
-      prev.map((item, i) =>
-        i === idx
+      prev.map((item) =>
+        item.name === roomName
           ? {
               ...item,
               completed: !item.completed,
@@ -431,11 +960,11 @@ export default function DesignWorkspace({
   };
 
   // Set individual room progress
-  const handleRoomProgressChange = (idx, pct) => {
+  const handleRoomProgressChange = (roomName, pct) => {
     const value = Math.max(0, Math.min(100, Number(pct)));
     setRoomChecklist((prev) =>
-      prev.map((item, i) =>
-        i === idx
+      prev.map((item) =>
+        item.name === roomName
           ? { ...item, percentage: value, completed: value === 100 }
           : item,
       ),
@@ -443,10 +972,13 @@ export default function DesignWorkspace({
   };
 
   // Overall Room-wise completion average
-  const roomCompletionAverage = Math.round(
-    roomChecklist.reduce((sum, r) => sum + r.percentage, 0) /
-      roomChecklist.length,
-  );
+  const roomCompletionAverage =
+    visibleRoomChecklist.length === 0
+      ? 0
+      : Math.round(
+          visibleRoomChecklist.reduce((sum, r) => sum + r.percentage, 0) /
+            visibleRoomChecklist.length,
+        );
 
   // STAGE 1 (Default Design) Completion check
   const isDefaultDesignValid =
@@ -454,8 +986,6 @@ export default function DesignWorkspace({
     designNotes.trim() !== "" &&
     referenceFiles.length >= 1 &&
     roomCompletionAverage === 100;
-
-
 
   // Auto-completion for Default Design
   useEffect(() => {
@@ -475,11 +1005,138 @@ export default function DesignWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDefaultDesignValid]);
 
+  // Load/Restore blob URLs from IndexedDB on mount
+  useEffect(() => {
+    let active = true;
+    const restoreUrls = async () => {
+      const restoreFileArray = async (filesArray) => {
+        if (!filesArray) return [];
+        return Promise.all(
+          filesArray.map(async (file) => {
+            const storedFile = await getFile(file.id);
+            let updatedUrl = file.url || file.fileUrl;
+            let updatedVersions = file.versions || [];
+
+            if (storedFile) {
+              updatedUrl = URL.createObjectURL(storedFile);
+            }
+
+            if (file.versions && file.versions.length > 0) {
+              updatedVersions = await Promise.all(
+                file.versions.map(async (v) => {
+                  const versionFile = await getFile(`${file.id}-${v.version}`);
+                  let vUrl = v.url;
+                  if (versionFile) {
+                    vUrl = URL.createObjectURL(versionFile);
+                  }
+                  return { ...v, url: vUrl };
+                }),
+              );
+            }
+
+            const res = { ...file, versions: updatedVersions };
+            if (file.url !== undefined) res.url = updatedUrl;
+            if (file.fileUrl !== undefined) res.fileUrl = updatedUrl;
+            return res;
+          }),
+        );
+      };
+
+      const restoredReferenceFiles = await restoreFileArray(referenceFiles);
+
+      const restoredRevisions = await Promise.all(
+        revisions.map(async (rev) => {
+          const restoredAttached = await restoreFileArray(rev.attachedFiles);
+          return { ...rev, attachedFiles: restoredAttached };
+        }),
+      );
+
+      const restoredDrawings = await Promise.all(
+        drawings.map(async (draw) => {
+          const restoredVersions = await Promise.all(
+            (draw.versions || []).map(async (v) => {
+              const versionFile = await getFile(`${draw.id}-${v.version}`);
+              let vUrl = v.url;
+              if (versionFile) {
+                vUrl = URL.createObjectURL(versionFile);
+              }
+              return { ...v, url: vUrl };
+            }),
+          );
+          const latestVersionFile = await getFile(`${draw.id}-${draw.version}`);
+          let fileUrl = draw.fileUrl;
+          if (latestVersionFile) {
+            fileUrl = URL.createObjectURL(latestVersionFile);
+          }
+          return { ...draw, fileUrl, versions: restoredVersions };
+        }),
+      );
+
+      if (active) {
+        setReferenceFiles(restoredReferenceFiles);
+        setRevisions(restoredRevisions);
+        setDrawings(restoredDrawings);
+      }
+    };
+
+    restoreUrls();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Auto-scroll for Internal Comments
+  useEffect(() => {
+    if (internalCommentsBottomRef.current) {
+      internalCommentsBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [internalComments]);
+
+  // Auto-scroll for Client Feedback
+  useEffect(() => {
+    if (clientFeedbackBottomRef.current) {
+      clientFeedbackBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [discussionHistory]);
+
+  // Drag and Drop Handlers
+  const handleDragStart = (e, roomName) => {
+    setDraggedRoomName(roomName);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, targetRoomName) => {
+    e.preventDefault();
+    if (draggedRoomName === null || draggedRoomName === targetRoomName) return;
+    setRoomChecklist((prev) => {
+      const updatedList = [...prev];
+      const draggedIdx = updatedList.findIndex((r) => r.name === draggedRoomName);
+      const targetIdx = updatedList.findIndex((r) => r.name === targetRoomName);
+      if (draggedIdx === -1 || targetIdx === -1) return prev;
+
+      const [draggedItem] = updatedList.splice(draggedIdx, 1);
+      updatedList.splice(targetIdx, 0, draggedItem);
+      return updatedList;
+    });
+    setDraggedRoomName(null);
+    addActivity(
+      "Reordered room checklist items",
+      site.supervisor || "Alex Sterling",
+    );
+  };
+
   // STAGE 2 (Redesign) Completion check
   const redesignStageStatus = (() => {
     if (revisions.length === 0) return "Completed";
     const allCompleted = revisions.every(
-      (r) => r.status === "Completed" && r.attachedFiles && r.attachedFiles.length > 0,
+      (r) =>
+        r.status === "Completed" &&
+        r.attachedFiles &&
+        r.attachedFiles.length > 0,
     );
     if (allCompleted) return "Completed";
     const anyInProgress = revisions.some((r) => r.status === "In Progress");
@@ -487,36 +1144,9 @@ export default function DesignWorkspace({
     return "Pending";
   })();
 
-  // STAGE 3 (2D/3D Drawings) Completion check
-  const MANDATORY_DRAWINGS = ["Floor Plan", "Furniture Layout", "Electrical Layout", "Ceiling Layout"];
-
-  const missingMandatoryDrawings = MANDATORY_DRAWINGS.filter(
-    (name) => !drawings.some((d) => d.name.toLowerCase().includes(name.toLowerCase())),
-  );
-
-  const hasMandatoryDrawings = missingMandatoryDrawings.length === 0;
-
-  const allMandatoryDrawingsApproved = MANDATORY_DRAWINGS.every((name) =>
-    drawings.some(
-      (d) => d.name.toLowerCase().includes(name.toLowerCase()) && d.status === "Approved",
-    ),
-  );
-
-  const noDrawingInDraftOrUnderReview =
-    drawings.length > 0 &&
-    drawings.every((d) => d.status !== "Draft" && d.status !== "Under Review");
-
+  // Drawings Stage Completion check (all uploaded drawings must be approved)
   const isDrawingsStageCompleted =
-    drawings.length >= 4 &&
-    hasMandatoryDrawings &&
-    allMandatoryDrawingsApproved &&
-    noDrawingInDraftOrUnderReview;
-
-
-
-
-
-
+    drawings.length > 0 && drawings.every((d) => d.status === "Approved");
 
   // Smart Progress Calculation
   const defaultDesignProgress = Math.round(
@@ -531,14 +1161,18 @@ export default function DesignWorkspace({
     revisions.length === 0
       ? 100
       : Math.round(
-          (revisions.filter((r) => r.status === "Completed").length / revisions.length) * 100,
+          (revisions.filter((r) => r.status === "Completed").length /
+            revisions.length) *
+            100,
         );
 
   const drawingsProgress =
     drawings.length === 0
       ? 0
       : Math.round(
-          (drawings.filter((d) => d.status === "Approved").length / drawings.length) * 100,
+          (drawings.filter((d) => d.status === "Approved").length /
+            drawings.length) *
+            100,
         );
 
   const getApprovalProgressVal = (status) => {
@@ -551,7 +1185,11 @@ export default function DesignWorkspace({
 
   const overallDesignProgress = Math.round(
     revisions.length > 0
-      ? (defaultDesignProgress + redesignProgress + drawingsProgress + approvalProgress) / 4
+      ? (defaultDesignProgress +
+          redesignProgress +
+          drawingsProgress +
+          approvalProgress) /
+          4
       : (defaultDesignProgress + drawingsProgress + approvalProgress) / 3,
   );
 
@@ -596,6 +1234,7 @@ export default function DesignWorkspace({
       lastReminderSentDate,
       digitalAcknowledgementVerified,
       progress: overallDesignProgress,
+      clientNotifications,
     };
     onSave(updated);
 
@@ -635,6 +1274,7 @@ export default function DesignWorkspace({
     lastReminderSentDate,
     digitalAcknowledgementVerified,
     overallDesignProgress,
+    clientNotifications,
   ]);
 
   // Determine current stage index
@@ -642,7 +1282,8 @@ export default function DesignWorkspace({
     if (approvalStatus === "Approved") return 4;
     if (designStatus === "Completed") {
       const hasPendingRevisions =
-        revisions.length > 0 && !revisions.every((r) => r.status === "Completed");
+        revisions.length > 0 &&
+        !revisions.every((r) => r.status === "Completed");
       if (hasPendingRevisions) return 1;
       if (!isDrawingsStageCompleted) return 2;
       return 3;
@@ -669,7 +1310,7 @@ export default function DesignWorkspace({
     }
     if (tabKey === "approval" && !isDrawingsStageCompleted) {
       setModalAlert({
-        message: `Required drawings must be approved first. ${missingMandatoryDrawings.length > 0 ? "Mandatory drawings: " + missingMandatoryDrawings.join(", ") : "All uploaded drawings must be reviewed and approved."}`,
+        message: "All uploaded drawings must be reviewed and approved first.",
       });
       return;
     }
@@ -682,14 +1323,19 @@ export default function DesignWorkspace({
       let msg = "Cannot submit Default Design. ";
       if (conceptTitle.trim() === "") msg += "Concept Title is missing. ";
       if (designNotes.trim() === "") msg += "Design Notes are missing. ";
-      if (referenceFiles.length === 0) msg += "At least one reference file is required. ";
-      if (roomCompletionAverage < 100) msg += "Room checklist must be 100% complete. ";
+      if (referenceFiles.length === 0)
+        msg += "At least one reference file is required. ";
+      if (roomCompletionAverage < 100)
+        msg += "Room checklist must be 100% complete. ";
       setModalAlert({ message: msg });
       return;
     }
     setDesignStatus("Completed");
     setLastUpdatedDefaultDesign(new Date().toLocaleDateString("en-IN"));
-    addActivity("Default Design submitted for review", site.supervisor || "Alex Sterling");
+    addActivity(
+      "Default Design submitted for review",
+      site.supervisor || "Alex Sterling",
+    );
     addNotification("Default Design Submitted!", "success");
     setActiveTab("drawings");
   };
@@ -734,12 +1380,63 @@ export default function DesignWorkspace({
 
   // Update a revision status
   const handleUpdateRevisionStatus = (id, newStatus) => {
+    const today = new Date().toLocaleDateString("en-IN");
+    const completedByUser = "Priya S. (Designer)";
+
     setRevisions((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)),
+      prev.map((r) => {
+        if (r.id === id) {
+          const isCompleted = newStatus === "Completed";
+          return {
+            ...r,
+            status: newStatus,
+            completedDate: isCompleted ? today : r.completedDate,
+            completedBy: isCompleted ? completedByUser : r.completedBy,
+          };
+        }
+        return r;
+      }),
     );
     setLastUpdatedRedesign(new Date().toLocaleDateString("en-IN"));
-    addActivity(`Revision status updated to ${newStatus}`, "Priya S. (Designer)");
+    addActivity(
+      `Revision status updated to ${newStatus}`,
+      "Priya S. (Designer)",
+    );
     addNotification(`Revision marked as ${newStatus}`, "success");
+
+    const targetRev = revisions.find((r) => r.id === id);
+    const revNum = targetRev ? targetRev.revisionNumber : "";
+    let clientNotifTitle = "";
+    let clientNotifText = "";
+    let clientNotifType = "info";
+
+    if (newStatus === "In Progress") {
+      clientNotifTitle = "Revision Started";
+      clientNotifText = `The design team has started work on Revision ${revNum}.`;
+      clientNotifType = "info";
+    } else if (newStatus === "Completed") {
+      clientNotifTitle = "Revision Completed";
+      clientNotifText = `Revision ${revNum} has been completed. Review the updated files.`;
+      clientNotifType = "success";
+    }
+
+    if (clientNotifTitle) {
+      const newNotif = {
+        id: `notif-${Date.now()}`,
+        title: clientNotifTitle,
+        text: clientNotifText,
+        type: clientNotifType,
+        timestamp:
+          new Date().toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }) +
+          " " +
+          new Date().toLocaleDateString("en-IN"),
+        read: false,
+      };
+      setClientNotifications((prev) => [...prev, newNotif]);
+    }
   };
 
   // Delete revision attachment handler
@@ -755,7 +1452,11 @@ export default function DesignWorkspace({
         return r;
       }),
     );
-    addActivity(`Deleted attachment in revision ${revId}`, "Priya S. (Designer)");
+    deleteFile(fileId);
+    addActivity(
+      `Deleted attachment in revision ${revId}`,
+      "Priya S. (Designer)",
+    );
   };
 
   // Add internal comment
@@ -808,7 +1509,10 @@ export default function DesignWorkspace({
           : c,
       ),
     );
-    addActivity("Toggled resolve status on discussion thread", "Vijay K. (Supervisor)");
+    addActivity(
+      "Toggled resolve status on discussion thread",
+      "Vijay K. (Supervisor)",
+    );
   };
 
   const handleAddReply = (commentId) => {
@@ -869,7 +1573,8 @@ export default function DesignWorkspace({
   const handleSendForApproval = () => {
     if (!isDrawingsStageCompleted) {
       setModalAlert({
-        message: `Cannot submit for approval. ${missingMandatoryDrawings.length > 0 ? "Mandatory drawings: " + missingMandatoryDrawings.join(", ") : "All uploaded drawings must be reviewed and approved."}`,
+        message:
+          "Cannot submit for approval. All uploaded drawings must be reviewed and approved.",
       });
       return;
     }
@@ -888,7 +1593,10 @@ export default function DesignWorkspace({
     };
     setApprovalHistory((prev) => [...prev, submission]);
 
-    addActivity("Design package submitted for Client Approval", "Priya S. (Designer)");
+    addActivity(
+      "Design package submitted for Client Approval",
+      "Priya S. (Designer)",
+    );
     addNotification("Approval package sent to client!", "success");
   };
 
@@ -898,7 +1606,9 @@ export default function DesignWorkspace({
     setApprovalStatus("Viewed");
     setLastUpdatedApproval(today);
     setApprovalHistory((prev) =>
-      prev.map((s, idx) => (idx === prev.length - 1 ? { ...s, status: "Viewed" } : s)),
+      prev.map((s, idx) =>
+        idx === prev.length - 1 ? { ...s, status: "Viewed" } : s,
+      ),
     );
     addActivity("Client viewed the submitted design package", "Client");
     addNotification("Client viewed design package", "info");
@@ -911,7 +1621,9 @@ export default function DesignWorkspace({
     setDigitalAcknowledgementVerified(true);
     setLastUpdatedApproval(today);
     setApprovalHistory((prev) =>
-      prev.map((s, idx) => (idx === prev.length - 1 ? { ...s, status: "Approved" } : s)),
+      prev.map((s, idx) =>
+        idx === prev.length - 1 ? { ...s, status: "Approved" } : s,
+      ),
     );
     addActivity("Design package Approved by client", "Client");
     addNotification("Design Package Approved!", "success");
@@ -926,7 +1638,9 @@ export default function DesignWorkspace({
         setApprovalStatus("Pending");
         setApprovalFeedback(feedback || "Client requested modifications.");
         setApprovalHistory((prev) =>
-          prev.map((s, idx) => (idx === prev.length - 1 ? { ...s, status: "Changes Requested" } : s)),
+          prev.map((s, idx) =>
+            idx === prev.length - 1 ? { ...s, status: "Changes Requested" } : s,
+          ),
         );
 
         // Auto-create redesign revision request
@@ -939,8 +1653,7 @@ export default function DesignWorkspace({
             feedback ||
             "Feedback from approval stage: requested design revisions.",
           priority: "High",
-          notes:
-            "Created automatically from client approval feedback.",
+          notes: "Created automatically from client approval feedback.",
           resolutionNotes: "",
           status: "Pending",
           revisionNumber: `Revision ${revisions.length + 1}`,
@@ -969,7 +1682,9 @@ export default function DesignWorkspace({
   const handleRejectDesign = () => {
     setApprovalStatus("Pending");
     setApprovalHistory((prev) =>
-      prev.map((s, idx) => (idx === prev.length - 1 ? { ...s, status: "Rejected" } : s)),
+      prev.map((s, idx) =>
+        idx === prev.length - 1 ? { ...s, status: "Rejected" } : s,
+      ),
     );
     addActivity("Design package Rejected by client", "Client");
     addNotification("Design package rejected by client.", "error");
@@ -980,7 +1695,10 @@ export default function DesignWorkspace({
     const today = new Date().toLocaleDateString("en-IN");
     setRemindersSentCount((prev) => prev + 1);
     setLastReminderSentDate(today);
-    addActivity("Sent design approval reminder to client", "Vijay K. (Supervisor)");
+    addActivity(
+      "Sent design approval reminder to client",
+      "Vijay K. (Supervisor)",
+    );
     addNotification("Approval reminder sent to client!", "success");
   };
 
@@ -1002,10 +1720,12 @@ export default function DesignWorkspace({
         "Design stage completed and approved. Project transitioned to Site Execution phase.",
     };
     onSave(updated);
-    addActivity("Project moved to site Execution / In Progress", "Vijay K. (Supervisor)");
+    addActivity(
+      "Project moved to site Execution / In Progress",
+      "Vijay K. (Supervisor)",
+    );
     window.location.reload();
   };
-
   // Drawing Version Helper
   const incrementVersion = (currentVer) => {
     const match = currentVer.match(/V(\d+)/i);
@@ -1016,8 +1736,30 @@ export default function DesignWorkspace({
     return "V2";
   };
 
+  const handleSaveCustomDrawingName = () => {
+    const trimmed = newCustomDrawName.trim();
+    if (!trimmed) {
+      setCustomDrawNameError("Drawing name cannot be empty.");
+      return;
+    }
+    const exists = drawingNameOptions.some(
+      (opt) => opt.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      setCustomDrawNameError("Drawing Name already exists.");
+      return;
+    }
+
+    setDrawingNameOptions((prev) => [...prev, trimmed]);
+    setDrawName(trimmed);
+    setShowAddNewDrawNamePopover(false);
+    setNewCustomDrawName("");
+    setCustomDrawNameError("");
+    addNotification(`Drawing name "${trimmed}" added and selected.`, "success");
+  };
+
   // Drawing Upload Handler (with Name duplicate check for versioning)
-  const handleUploadDrawing = (e) => {
+  const handleUploadDrawing = async (e) => {
     e.preventDefault();
     if (!drawName.trim() || !modalDrawingFile) return;
 
@@ -1026,8 +1768,16 @@ export default function DesignWorkspace({
       (d) => d.name.toLowerCase().trim() === drawName.toLowerCase().trim(),
     );
 
+    const rawFile = await getFile(modalDrawingFile.id);
+
     if (existingDrawing) {
       const nextVer = incrementVersion(existingDrawing.version);
+
+      if (rawFile) {
+        await storeFile(`${existingDrawing.id}-${nextVer}`, rawFile);
+        await storeFile(existingDrawing.id, rawFile);
+      }
+
       const newVerObj = {
         version: nextVer,
         name: modalDrawingFile.name,
@@ -1050,16 +1800,26 @@ export default function DesignWorkspace({
                 size: modalDrawingFile.size,
                 uploadDate: dateStr,
                 status: drawStatus,
+                visibleToClient: drawVisibleToClient,
                 versions: [...(d.versions || []), newVerObj],
               }
             : d,
         ),
       );
-      addActivity(`Uploaded version ${nextVer} of drawing "${drawName}"`, drawUploadedBy);
+      addActivity(
+        `Uploaded version ${nextVer} of drawing "${drawName}"`,
+        drawUploadedBy,
+      );
       addNotification(`New version uploaded for ${drawName}`, "success");
     } else {
+      const newDrawId = `dr-${Date.now()}`;
+      if (rawFile) {
+        await storeFile(`${newDrawId}-V1`, rawFile);
+        await storeFile(newDrawId, rawFile);
+      }
+
       const newDraw = {
-        id: `dr-${Date.now()}`,
+        id: newDrawId,
         name: drawName,
         category: drawCategory === "2D Drawing" ? "2D Drawings" : "3D Drawings",
         version: "V1",
@@ -1072,6 +1832,7 @@ export default function DesignWorkspace({
         reviewer: "",
         reviewDate: "",
         reviewComments: "",
+        visibleToClient: drawVisibleToClient,
         versions: [
           {
             version: "V1",
@@ -1093,6 +1854,9 @@ export default function DesignWorkspace({
     setDrawName("");
     setModalDrawingFile(null);
     setShowUploadModal(false);
+    setShowAddNewDrawNamePopover(false);
+    setNewCustomDrawName("");
+    setCustomDrawNameError("");
     setLastUpdatedDrawings(dateStr);
   };
 
@@ -1150,19 +1914,19 @@ export default function DesignWorkspace({
       onCancel: () => {
         setReplaceTarget(null);
         setTempReplacementFile(null);
-      }
+      },
     });
   };
 
-  const completeFileReplacement = (file, notes) => {
+  const completeFileReplacement = async (file, notes) => {
     const extension = file.name.split(".").pop().toUpperCase();
-    
+
     // Show upload progress
     setReplacementUploading(true);
     setReplacementProgress(0);
 
     let progress = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       progress += 20;
       setReplacementProgress(progress);
       if (progress >= 100) {
@@ -1173,11 +1937,20 @@ export default function DesignWorkspace({
         const uploadedBy = site.supervisor || "Alex Sterling";
 
         if (replaceTarget.type === "default-design") {
+          const targetFile = referenceFiles.find(
+            (f) => f.id === replaceTarget.id,
+          );
+          const currentVer = targetFile
+            ? parseInt(targetFile.version.replace("V", "")) || 1
+            : 1;
+          const nextVer = `V${currentVer + 1}`;
+
+          await storeFile(replaceTarget.id, file);
+          await storeFile(`${replaceTarget.id}-${nextVer}`, file);
+
           setReferenceFiles((prev) =>
             prev.map((f) => {
               if (f.id === replaceTarget.id) {
-                const currentVer = parseInt(f.version.replace("V", "")) || 1;
-                const nextVer = `V${currentVer + 1}`;
                 const newVerObj = {
                   version: nextVer,
                   name: file.name,
@@ -1203,17 +1976,34 @@ export default function DesignWorkspace({
             }),
           );
           setLastUpdatedDefaultDesign(dateStr);
-          addActivity(`Replaced reference file: ${file.name} (${notes})`, uploadedBy);
+          addActivity(
+            `Replaced reference file: ${file.name} (${notes})`,
+            uploadedBy,
+          );
           addNotification("Reference file replaced", "success");
         } else if (replaceTarget.type === "revision-attachment") {
+          await storeFile(replaceTarget.id, file);
+          let nextVer = "V2";
+          const targetRev = revisions.find(
+            (r) => r.id === replaceTarget.revisionId,
+          );
+          if (targetRev) {
+            const targetAtt = targetRev.attachedFiles.find(
+              (att) => att.id === replaceTarget.id,
+            );
+            if (targetAtt) {
+              const currentVer =
+                parseInt(targetAtt.version.replace("V", "")) || 1;
+              nextVer = `V${currentVer + 1}`;
+            }
+          }
+          await storeFile(`${replaceTarget.id}-${nextVer}`, file);
+
           setRevisions((prev) =>
             prev.map((r) => {
               if (r.id === replaceTarget.revisionId) {
                 const updatedAttachments = r.attachedFiles.map((att) => {
                   if (att.id === replaceTarget.id) {
-                    const currentVer =
-                      parseInt(att.version.replace("V", "")) || 1;
-                    const nextVer = `V${currentVer + 1}`;
                     const newVerObj = {
                       version: nextVer,
                       name: file.name,
@@ -1249,11 +2039,18 @@ export default function DesignWorkspace({
           );
           addNotification("Revision attachment replaced", "success");
         } else if (replaceTarget.type === "drawing") {
+          const targetDrawing = drawings.find((d) => d.id === replaceTarget.id);
+          const currentVer = targetDrawing
+            ? parseInt(targetDrawing.version.replace("V", "")) || 1
+            : 1;
+          const nextVer = `V${currentVer + 1}`;
+
+          await storeFile(replaceTarget.id, file);
+          await storeFile(`${replaceTarget.id}-${nextVer}`, file);
+
           setDrawings((prev) =>
             prev.map((d) => {
               if (d.id === replaceTarget.id) {
-                const currentVer = parseInt(d.version.replace("V", "")) || 1;
-                const nextVer = `V${currentVer + 1}`;
                 const newVerObj = {
                   version: nextVer,
                   name: file.name,
@@ -1300,7 +2097,10 @@ export default function DesignWorkspace({
     return parts.map((part, i) => {
       if (part.startsWith("@")) {
         return (
-          <span key={i} className="text-select-blue font-bold bg-blue-50 px-1 rounded">
+          <span
+            key={i}
+            className="text-select-blue font-bold bg-blue-50 px-1 rounded"
+          >
             {part}
           </span>
         );
@@ -1313,20 +2113,28 @@ export default function DesignWorkspace({
   const handleReviewDrawingSubmit = (reviewer, comments, status) => {
     if (!selectedDrawingForReview) return;
     const dateStr = new Date().toLocaleDateString("en-IN");
-    setDrawings(prev => prev.map(d => {
-      if (d.id === selectedDrawingForReview.id) {
-        return {
-          ...d,
-          reviewer,
-          reviewComments: comments,
-          reviewDate: dateStr,
-          status: status,
-        };
-      }
-      return d;
-    }));
-    addActivity(`Reviewed drawing "${selectedDrawingForReview.name}": Set status to ${status}`, reviewer);
-    addNotification(`Drawing marked as ${status}`, status === "Approved" ? "success" : "warning");
+    setDrawings((prev) =>
+      prev.map((d) => {
+        if (d.id === selectedDrawingForReview.id) {
+          return {
+            ...d,
+            reviewer,
+            reviewComments: comments,
+            reviewDate: dateStr,
+            status: status,
+          };
+        }
+        return d;
+      }),
+    );
+    addActivity(
+      `Reviewed drawing "${selectedDrawingForReview.name}": Set status to ${status}`,
+      reviewer,
+    );
+    addNotification(
+      `Drawing marked as ${status}`,
+      status === "Approved" ? "success" : "warning",
+    );
     setSelectedDrawingForReview(null);
   };
 
@@ -1392,11 +2200,15 @@ export default function DesignWorkspace({
     } else if (activeTab === "redesign") {
       if (redesignStageStatus !== "Completed") {
         setModalAlert({
-          message: "Redesign stage cannot be submitted. All revision requests must be resolved and have uploaded resolution files.",
+          message:
+            "Redesign stage cannot be submitted. All revision requests must be resolved and have uploaded resolution files.",
         });
         return;
       }
-      addActivity("Redesign stage completed", site.supervisor || "Alex Sterling");
+      addActivity(
+        "Redesign stage completed",
+        site.supervisor || "Alex Sterling",
+      );
       setLastUpdatedRedesign(new Date().toLocaleDateString("en-IN"));
       setActiveTab("drawings");
       setModalAlert({
@@ -1405,11 +2217,15 @@ export default function DesignWorkspace({
     } else if (activeTab === "drawings") {
       if (!isDrawingsStageCompleted) {
         setModalAlert({
-          message: `Cannot submit Drawings stage. ${missingMandatoryDrawings.length > 0 ? "Mandatory drawings missing: " + missingMandatoryDrawings.join(", ") : "All mandatory drawings must be approved and no drawings remain in Draft or Under Review."}`,
+          message:
+            "Cannot submit Drawings stage. All uploaded drawings must be reviewed and approved.",
         });
         return;
       }
-      addActivity("Drawings stage submitted", site.supervisor || "Alex Sterling");
+      addActivity(
+        "Drawings stage submitted",
+        site.supervisor || "Alex Sterling",
+      );
       setLastUpdatedDrawings(new Date().toLocaleDateString("en-IN"));
       setActiveTab("approval");
       setModalAlert({
@@ -1429,8 +2245,6 @@ export default function DesignWorkspace({
       : "";
     return formattedPreset ? `${formattedPreset} / ${siteType}` : siteType;
   };
-
-
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden relative select-none">
@@ -1630,6 +2444,46 @@ export default function DesignWorkspace({
         </div>
       </div>
 
+      {/* Design Notifications / Rejections Alert Panel */}
+      {drawings.some((d) => d.status === "Rejected") && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-4 mb-4 flex flex-col gap-2 shadow-xs shrink-0 text-xs text-left">
+          <div className="flex items-center gap-2 font-bold text-rose-900">
+            <FiAlertTriangle className="shrink-0 text-rose-500" size={16} />
+            <span>Design Rejections Detected</span>
+          </div>
+          <div className="space-y-2 max-h-32 overflow-y-auto">
+            {drawings
+              .filter((d) => d.status === "Rejected")
+              .map((d) => (
+                <div
+                  key={d.id}
+                  className="bg-white/60 p-2.5 rounded-lg border border-rose-100/50 flex flex-col gap-1"
+                >
+                  <div className="flex justify-between items-start flex-wrap gap-2">
+                    <span className="font-bold text-rose-950">
+                      Asset Name: <span className="underline">{d.name}</span>{" "}
+                      (Version {d.version})
+                    </span>
+                    <span className="text-[10px] text-rose-600 font-bold bg-rose-100/50 px-1.5 py-0.5 rounded">
+                      Rejected by {d.reviewer || "Client"}
+                    </span>
+                  </div>
+                  {d.reviewDate && (
+                    <span className="text-[9px] text-gray-400 font-medium">
+                      Date & Time: {d.reviewDate}
+                    </span>
+                  )}
+                  {d.reviewComments && (
+                    <p className="text-[11px] text-rose-900/80 italic font-semibold mt-1">
+                      Reason: "{d.reviewComments}"
+                    </p>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Two-Column Grid Layout */}
       <div className="flex-1 flex flex-col lg:flex-row gap-6 w-full lg:items-stretch lg:overflow-hidden min-h-0">
         {/* Left Column: Main Navigation & Page Active Tab Contents (2/3 width) */}
@@ -1660,7 +2514,8 @@ export default function DesignWorkspace({
                   key: "approval",
                   label: "Client Approval",
                   icon: FiUserCheck,
-                  isLocked: designStatus !== "Completed" || !isDrawingsStageCompleted,
+                  isLocked:
+                    designStatus !== "Completed" || !isDrawingsStageCompleted,
                 },
               ].map((tab) => {
                 const isActive = activeTab === tab.key;
@@ -1747,225 +2602,256 @@ export default function DesignWorkspace({
                     />
                   </div>
                 </div>
-
                 {/* Reference Files Card */}
                 <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-sm font-bold uppercase tracking-wider text-darkgray">
                       Reference Files
                     </h3>
-                    <ReusableFileUploader
-                      allowedTypes={[
-                        "JPG",
-                        "PNG",
-                        "WEBP",
-                        "PDF",
-                        "DOC",
-                        "DOCX",
-                      ]}
-                      maxSizeMB={50}
-                      onUploadSuccess={(fileObj) => {
-                        const newFile = {
-                          ...fileObj,
-                          versions: [
-                            {
-                              version: "V1",
-                              name: fileObj.name,
-                              url: fileObj.url,
-                              uploadedBy: site.supervisor || "Alex Sterling",
-                              uploadDate: new Date().toLocaleDateString("en-IN"),
-                              fileSize: formatBytes(fileObj.size),
-                              size: fileObj.size,
-                              changeNotes: "Initial file upload.",
-                            }
-                          ]
-                        };
-                        setReferenceFiles((prev) => [...prev, newFile]);
-                        setLastUpdatedDefaultDesign(
-                          new Date().toLocaleDateString("en-IN"),
-                        );
-                        addActivity(`Uploaded reference file: ${fileObj.name}`, site.supervisor || "Alex Sterling");
-                      }}
-                      uploadedBy={site.supervisor || "Alex Sterling"}
-                      buttonText="Upload Files"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRefUploadModal(true)}
+                      className="flex items-center gap-1.5 bg-linear-to-r from-select-blue to-dark-blue hover:from-blue-950 hover:to-blue-900 text-white rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer hover:shadow-select-blue/30 hover:scale-[1.02] transition-all"
+                    >
+                      <FiPlus size={13} />
+                      <span>Upload Files</span>
+                    </button>
                   </div>
                   <div className="border-b border-gray-100 mb-4" />
 
-                  {referenceFiles.length > 0 ? (
-                    <div className="overflow-x-auto border border-gray-100 rounded-xl">
-                      <table className="w-full text-left text-xs text-darkgray">
-                        <thead>
-                          <tr className="bg-palewhite border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
-                            <th className="p-3">File Name</th>
-                            <th className="p-3">Type</th>
-                            <th className="p-3">Uploaded By</th>
-                            <th className="p-3">Date</th>
-                            <th className="p-3 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {referenceFiles.map((file) => (
-                            <tr
-                              key={file.id}
-                              className="hover:bg-palewhite/50 transition-colors"
-                            >
-                              <td
-                                className="p-3 font-bold truncate max-w-[200px]"
-                                title={file.name}
-                              >
-                                {file.name}
-                              </td>
-                              <td className="p-3 font-semibold text-gray-500 uppercase">
-                                {file.type}
-                              </td>
-                              <td className="p-3 font-semibold text-gray-500">
-                                {file.uploadedBy}
-                              </td>
-                              <td className="p-3 text-gray-400 font-semibold">
-                                {file.uploadedDate}
-                              </td>
-                              <td className="p-3 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    onClick={() => {
-                                      const ext = file.type.toLowerCase();
-                                      if (
-                                        ["png", "jpg", "jpeg", "webp"].includes(
-                                          ext,
-                                        )
-                                      ) {
-                                        onExpandPhoto([file.url], 0, file.name);
-                                      } else {
-                                        window.open(file.url, "_blank");
-                                      }
-                                    }}
-                                    className="p-1.5 hover:text-select-blue bg-white border border-gray-200 hover:border-select-blue rounded transition-all cursor-pointer"
-                                    title="View"
-                                  >
-                                    <FiEye size={12} />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const a = document.createElement("a");
-                                      a.href = file.url;
-                                      a.download = file.name;
-                                      document.body.appendChild(a);
-                                      a.click();
-                                      document.body.removeChild(a);
-                                    }}
-                                    className="p-1.5 hover:text-emerald-600 bg-white border border-gray-200 hover:border-emerald-600 rounded transition-all cursor-pointer"
-                                    title="Download"
-                                  >
-                                    <FiDownload size={12} />
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleReplaceFileClick(
-                                        "default-design",
-                                        file.id,
-                                      )
-                                    }
-                                    className="p-1.5 hover:text-amber-600 bg-white border border-gray-200 hover:border-amber-600 rounded transition-all cursor-pointer"
-                                    title="Replace"
-                                  >
-                                    <FiRefreshCw size={12} />
-                                  </button>
-                                  <button
-                                    onClick={() => setSelectedReferenceFileForHistory(file)}
-                                    className="p-1.5 hover:text-blue-500 bg-white border border-gray-200 hover:border-blue-500 rounded transition-all cursor-pointer"
-                                    title="Version History"
-                                  >
-                                    <FiClock size={12} />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setModalConfirm({
-                                        message: `Are you sure you want to delete reference file "${file.name}"?`,
-                                        onConfirm: () => {
-                                          setReferenceFiles((prev) =>
-                                            prev.filter(
-                                              (f) => f.id !== file.id,
-                                            ),
-                                          );
-                                          addActivity(
-                                            `Deleted reference file: ${file.name}`,
-                                            site.supervisor || "Alex Sterling"
-                                          );
-                                        },
-                                      });
-                                    }}
-                                    className="p-1.5 hover:text-red-500 bg-white border border-gray-200 hover:border-red-500 rounded transition-all cursor-pointer"
-                                    title="Delete"
-                                  >
-                                    <FiTrash2 size={12} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic text-center py-4 bg-palewhite rounded-xl border border-gray-100">
-                      No reference files uploaded yet. (At least 1 file required to complete default design)
-                    </p>
-                  )}
-                </div>
+                  {(() => {
+                    const categories = getRoomCategories();
+                    const allUniqueCategories = Array.from(new Set([
+                      ...categories,
+                      ...referenceFiles.map((f) => f.category).filter(Boolean),
+                    ]));
 
+                    const categoriesWithFiles = allUniqueCategories.filter((catName) =>
+                      referenceFiles.some((f) => f.category === catName)
+                    );
+
+                    if (categoriesWithFiles.length > 0) {
+                      return (
+                        <div className="space-y-6">
+                          {categoriesWithFiles.map((catName) => {
+                            const files = referenceFiles.filter((f) => f.category === catName);
+                            return (
+                              <div key={catName} className="border border-gray-100 rounded-xl overflow-hidden shadow-xs">
+                                <div className="bg-slate-50 px-4 py-2.5 flex items-center justify-between border-b border-gray-150">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-2 w-2 rounded-full bg-select-blue animate-pulse" />
+                                    <span className="text-xs font-bold text-darkgray uppercase tracking-wider">{catName || "Uncategorized"}</span>
+                                    <span className="text-[10px] text-gray-400 bg-white border border-gray-150 px-1.5 py-0.2 rounded font-bold">
+                                      {files.length} {files.length === 1 ? "file" : "files"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-xs text-darkgray bg-white">
+                                    <thead>
+                                      <tr className="bg-palewhite/40 border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[9px]">
+                                        <th className="p-3 pl-4">File Name</th>
+                                        <th className="p-3">Type</th>
+                                        <th className="p-3">Uploaded By</th>
+                                        <th className="p-3">Date</th>
+                                        <th className="p-3 text-center pr-4">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {files.map((file) => (
+                                        <tr
+                                          key={file.id}
+                                          className="hover:bg-palewhite/30 transition-colors"
+                                        >
+                                          <td
+                                            className="p-3 pl-4 font-bold text-gray-800 truncate max-w-[200px]"
+                                            title={file.name}
+                                          >
+                                            {file.name}
+                                          </td>
+                                          <td className="p-3 font-semibold text-gray-500 uppercase">
+                                            {file.type}
+                                          </td>
+                                          <td className="p-3 font-semibold text-gray-500">
+                                            {file.uploadedBy}
+                                          </td>
+                                          <td className="p-3 text-gray-400 font-semibold">
+                                            {file.uploadedDate}
+                                          </td>
+                                          <td className="p-3 text-center pr-4">
+                                            <div className="flex items-center justify-center gap-1.5">
+                                              <button
+                                                onClick={() => {
+                                                  const ext = file.type.toLowerCase();
+                                                  const fileUrl =
+                                                    localUrls[file.id] || file.url;
+                                                  if (
+                                                    ["png", "jpg", "jpeg", "webp"].includes(
+                                                      ext,
+                                                    )
+                                                  ) {
+                                                    onExpandPhoto([fileUrl], 0, file.name);
+                                                  } else {
+                                                    window.open(fileUrl, "_blank");
+                                                  }
+                                                }}
+                                                className="p-1.5 hover:text-select-blue bg-white border border-gray-200 hover:border-select-blue rounded transition-all cursor-pointer"
+                                                title="View"
+                                              >
+                                                <FiEye size={12} />
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  const a = document.createElement("a");
+                                                  a.href = localUrls[file.id] || file.url;
+                                                  a.download = file.name;
+                                                  document.body.appendChild(a);
+                                                  a.click();
+                                                  document.body.removeChild(a);
+                                                }}
+                                                className="p-1.5 hover:text-emerald-600 bg-white border border-gray-200 hover:border-emerald-600 rounded transition-all cursor-pointer"
+                                                title="Download"
+                                              >
+                                                <FiDownload size={12} />
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  handleReplaceFileClick(
+                                                    "default-design",
+                                                    file.id,
+                                                  )
+                                                }
+                                                className="p-1.5 hover:text-amber-600 bg-white border border-gray-200 hover:border-amber-600 rounded transition-all cursor-pointer animate-all"
+                                                title="Replace"
+                                              >
+                                                <FiRefreshCw size={12} />
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  setSelectedReferenceFileForHistory(file)
+                                                }
+                                                className="p-1.5 hover:text-blue-500 bg-white border border-gray-200 hover:border-blue-500 rounded transition-all cursor-pointer"
+                                                title="Version History"
+                                              >
+                                                <FiClock size={12} />
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  setModalConfirm({
+                                                    message: `Are you sure you want to delete reference file "${file.name}"?`,
+                                                    onConfirm: () => {
+                                                      setReferenceFiles((prev) =>
+                                                        prev.filter(
+                                                          (f) => f.id !== file.id,
+                                                        ),
+                                                      );
+                                                      deleteFile(file.id);
+                                                      addActivity(
+                                                        `Deleted reference file: ${file.name}`,
+                                                        site.supervisor || "Alex Sterling",
+                                                      );
+                                                    },
+                                                  });
+                                                }}
+                                                className="p-1.5 hover:text-red-500 bg-white border border-gray-200 hover:border-red-500 rounded transition-all cursor-pointer"
+                                                title="Delete"
+                                              >
+                                                <FiTrash2 size={12} />
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <p className="text-xs text-gray-400 italic text-center py-4 bg-palewhite rounded-xl border border-gray-100">
+                          No reference files uploaded yet. (At least 1 file required
+                          to complete default design)
+                        </p>
+                      );
+                    }
+                  })()}
+                </div>
                 {/* Room-wise Design Checklist Card */}
                 <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left">
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
+                  <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4 flex-wrap gap-2">
                     <h3 className="text-sm font-bold uppercase tracking-wider text-darkgray">
                       Room-wise Design Checklist
                     </h3>
-                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${roomCompletionAverage === 100 ? "text-emerald-700 bg-emerald-50" : "text-select-blue bg-blue-50"}`}>
-                      {roomCompletionAverage}% Average Completion
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${roomCompletionAverage === 100 ? "text-emerald-700 bg-emerald-50" : "text-select-blue bg-blue-50"}`}
+                      >
+                        {roomCompletionAverage}% Average Completion
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {roomChecklist.map((room, idx) => (
-                      <div
-                        key={room.name}
-                        className="p-3 border border-gray-100 bg-palewhite rounded-xl flex flex-col gap-2 transition-all hover:shadow-xs"
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={room.completed}
-                              onChange={() => handleToggleChecklist(idx)}
-                              className="w-4 h-4 text-select-blue rounded border-gray-300 focus:ring-select-blue cursor-pointer"
-                            />
-                            <span className="text-xs font-bold text-darkgray">
-                              {room.name}
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded border border-gray-100">
-                            {room.percentage}% Done
-                          </span>
-                        </div>
+                    {visibleRoomChecklist.map((room) => {
+                      const isDraggedOver = draggedRoomName === room.name;
+                      return (
+                        <div
+                          key={room.name}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, room.name)}
+                          onDragOver={(e) => handleDragOver(e)}
+                          onDrop={(e) => handleDrop(e, room.name)}
+                          className={`p-3 border border-gray-100 bg-palewhite rounded-xl flex flex-col gap-2 transition-all hover:shadow-xs cursor-move relative ${
+                            isDraggedOver ? "border-select-blue opacity-50" : ""
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <input
+                                type="checkbox"
+                                checked={room.completed}
+                                onChange={() => handleToggleChecklist(room.name)}
+                                className="w-4 h-4 text-select-blue rounded border-gray-300 focus:ring-select-blue cursor-pointer shrink-0"
+                              />
+                              <span className="text-xs font-bold text-darkgray truncate">
+                                {room.name}
+                              </span>
+                            </div>
 
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="10"
-                            value={room.percentage}
-                            onChange={(e) =>
-                              handleRoomProgressChange(idx, e.target.value)
-                            }
-                            className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-select-blue"
-                          />
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded border border-gray-100">
+                                {room.percentage}% Done
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="10"
+                              value={room.percentage}
+                              onChange={(e) =>
+                                handleRoomProgressChange(room.name, e.target.value)
+                              }
+                              className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-select-blue"
+                            />
+                          </div>
                         </div>
+                      );
+                    })}
+                    {visibleRoomChecklist.length === 0 && (
+                      <div className="col-span-full py-6 text-center text-xs text-gray-400 italic bg-palewhite rounded-xl border border-gray-100">
+                        No rooms in checklist. Upload reference files to automatically generate checklist items.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
-
                 {/* Design Status Card */}
                 <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] flex justify-between items-center flex-wrap gap-4 text-left">
                   <div>
@@ -1981,7 +2867,9 @@ export default function DesignWorkspace({
                       (status) => (
                         <button
                           key={status}
-                          disabled={status === "Completed" && !isDefaultDesignValid}
+                          disabled={
+                            status === "Completed" && !isDefaultDesignValid
+                          }
                           onClick={() => setDesignStatus(status)}
                           className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer disabled:bg-gray-150 disabled:text-gray-450 disabled:border-gray-200 disabled:cursor-not-allowed ${
                             designStatus === status
@@ -2014,19 +2902,21 @@ export default function DesignWorkspace({
                     Revision History
                   </h3>
                   {revisions.length > 0 ? (
-                    <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                    <div className="max-h-[300px] overflow-y-auto border border-gray-100 rounded-xl scroll-hidden-bar">
                       <table className="w-full text-left text-xs text-darkgray cursor-pointer">
-                        <thead>
+                        <thead className="sticky top-0 bg-palewhite z-10">
                           <tr className="bg-palewhite border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
                             <th className="p-3">Revision</th>
                             <th className="p-3">Requested By</th>
                             <th className="p-3">Affected Rooms</th>
                             <th className="p-3">Priority</th>
-                            <th className="p-3">Date</th>
+                            <th className="p-3">Created Date</th>
+                            <th className="p-3">Completed Date</th>
+                            <th className="p-3">Completed By</th>
                             <th className="p-3">Status</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-100 bg-white">
                           {revisions.map((rev) => (
                             <tr
                               key={rev.id}
@@ -2043,12 +2933,20 @@ export default function DesignWorkspace({
                                 {rev.affectedRooms || "All Rooms"}
                               </td>
                               <td className="p-3 font-bold text-gray-500">
-                                <span className={`px-2 py-0.5 rounded text-[10px] ${rev.priority === "High" || rev.priority === "Critical" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-650"}`}>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] ${rev.priority === "High" || rev.priority === "Critical" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-650"}`}
+                                >
                                   {rev.priority}
                                 </span>
                               </td>
                               <td className="p-3 text-gray-400 font-semibold">
                                 {rev.date}
+                              </td>
+                              <td className="p-3 text-gray-400 font-semibold">
+                                {rev.completedDate || "—"}
+                              </td>
+                              <td className="p-3 text-gray-500 font-bold">
+                                {rev.completedBy || "—"}
                               </td>
                               <td className="p-3">
                                 <span
@@ -2321,7 +3219,8 @@ export default function DesignWorkspace({
                         2D / 3D Drawings
                       </h3>
                       <p className="text-[11px] text-gray-400 font-semibold mt-0.5">
-                        Manage and review versions of all project design drawings.
+                        Manage and review versions of all project design
+                        drawings.
                       </p>
                     </div>
                     <button
@@ -2343,6 +3242,7 @@ export default function DesignWorkspace({
                           <th className="p-3">Reviewer & Date</th>
                           <th className="p-3">Status</th>
                           <th className="p-3">Date</th>
+                          <th className="p-3 text-center">Visible to Client</th>
                           <th className="p-3 text-center">Actions</th>
                         </tr>
                       </thead>
@@ -2382,11 +3282,17 @@ export default function DesignWorkspace({
                               <td className="p-3 font-semibold text-gray-500">
                                 {draw.reviewer ? (
                                   <div>
-                                    <span className="block font-bold text-slate-800">{draw.reviewer}</span>
-                                    <span className="text-[10px] text-gray-400">{draw.reviewDate}</span>
+                                    <span className="block font-bold text-slate-800">
+                                      {draw.reviewer}
+                                    </span>
+                                    <span className="text-[10px] text-gray-400">
+                                      {draw.reviewDate}
+                                    </span>
                                   </div>
                                 ) : (
-                                  <span className="text-gray-400 italic">Unassigned</span>
+                                  <span className="text-gray-400 italic">
+                                    Unassigned
+                                  </span>
                                 )}
                               </td>
                               <td className="p-3">
@@ -2400,6 +3306,23 @@ export default function DesignWorkspace({
                                 {draw.uploadDate}
                               </td>
                               <td className="p-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={draw.visibleToClient !== false}
+                                  onChange={(e) => {
+                                    const val = e.target.checked;
+                                    setDrawings((prev) =>
+                                      prev.map((d) =>
+                                        d.id === draw.id
+                                          ? { ...d, visibleToClient: val }
+                                          : d,
+                                      ),
+                                    );
+                                  }}
+                                  className="w-4 h-4 rounded text-select-blue focus:ring-select-blue cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-3 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => {
@@ -2407,18 +3330,16 @@ export default function DesignWorkspace({
                                         .split(".")
                                         .pop()
                                         .toLowerCase();
+                                      const fileUrl =
+                                        localUrls[draw.id] || draw.fileUrl;
                                       if (
                                         ["png", "jpg", "jpeg", "webp"].includes(
                                           ext,
                                         )
                                       ) {
-                                        onExpandPhoto(
-                                          [draw.fileUrl],
-                                          0,
-                                          draw.name,
-                                        );
+                                        onExpandPhoto([fileUrl], 0, draw.name);
                                       } else {
-                                        window.open(draw.fileUrl, "_blank");
+                                        window.open(fileUrl, "_blank");
                                       }
                                     }}
                                     className="p-1.5 hover:text-select-blue bg-white border border-gray-200 hover:border-select-blue rounded transition-all cursor-pointer"
@@ -2429,7 +3350,8 @@ export default function DesignWorkspace({
                                   <button
                                     onClick={() => {
                                       const a = document.createElement("a");
-                                      a.href = draw.fileUrl;
+                                      a.href =
+                                        localUrls[draw.id] || draw.fileUrl;
                                       a.download = draw.name;
                                       document.body.appendChild(a);
                                       a.click();
@@ -2450,7 +3372,9 @@ export default function DesignWorkspace({
                                     <FiRefreshCw size={12} />
                                   </button>
                                   <button
-                                    onClick={() => setSelectedDrawingForReview(draw)}
+                                    onClick={() =>
+                                      setSelectedDrawingForReview(draw)
+                                    }
                                     className="p-1.5 hover:text-blue-600 bg-white border border-gray-200 hover:border-blue-600 rounded transition-all cursor-pointer"
                                     title="Review drawing"
                                   >
@@ -2475,9 +3399,10 @@ export default function DesignWorkspace({
                                               (d) => d.id !== draw.id,
                                             ),
                                           );
+                                          deleteFile(draw.id);
                                           addActivity(
                                             `Deleted drawing: ${draw.name}`,
-                                            site.supervisor || "Alex Sterling"
+                                            site.supervisor || "Alex Sterling",
                                           );
                                         },
                                       });
@@ -2495,19 +3420,88 @@ export default function DesignWorkspace({
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 p-3 bg-blue-50/20 border border-blue-100 rounded-xl text-xs flex flex-col gap-1.5">
-                    <span className="font-bold text-select-blue">Required Drawings Validation:</span>
-                    <p className="text-gray-600">
-                      To complete Drawings stage, upload at least 4 drawings including: <strong className="text-darkgray">Floor Plan, Furniture Layout, Electrical Layout, Ceiling Layout</strong>. All mandatory drawings must be approved.
-                    </p>
-                    {missingMandatoryDrawings.length > 0 ? (
-                      <span className="text-red-650 font-semibold">Missing mandatory drawings: {missingMandatoryDrawings.join(", ")}</span>
-                    ) : allMandatoryDrawingsApproved ? (
-                      <span className="text-emerald-700 font-semibold">✓ All mandatory drawings are approved!</span>
-                    ) : (
-                      <span className="text-amber-700 font-semibold">Awaiting review and approval for all mandatory drawings.</span>
-                    )}
-                  </div>
+                  {(() => {
+                    const totalDrawingsCount = drawings.length;
+                    const approvedDrawingsCount = drawings.filter(
+                      (d) => d.status === "Approved",
+                    ).length;
+                    const pendingDrawingsCount = drawings.filter(
+                      (d) =>
+                        d.status === "Under Review" ||
+                        d.status === "Draft" ||
+                        d.status === "Revision Required",
+                    ).length;
+
+                    let latestUploadInfo = "No uploads yet";
+                    if (drawings.length > 0) {
+                      const sorted = [...drawings].sort((a, b) => {
+                        const parseDateStr = (str) => {
+                          if (!str) return 0;
+                          const pts = str.split(/[./-]/);
+                          if (pts.length === 3) {
+                            return new Date(
+                              pts[2],
+                              pts[1] - 1,
+                              pts[0],
+                            ).getTime();
+                          }
+                          return new Date(str).getTime();
+                        };
+                        return (
+                          parseDateStr(b.uploadDate) -
+                          parseDateStr(a.uploadDate)
+                        );
+                      });
+                      if (sorted[0]) {
+                        latestUploadInfo = `${sorted[0].name} (${sorted[0].uploadDate})`;
+                      }
+                    }
+
+                    return (
+                      <div className="mt-4 p-4 bg-slate-50 border border-slate-100 rounded-xl text-xs text-left">
+                        <span className="font-bold text-darkgray uppercase tracking-wider text-[10px] block mb-3">
+                          Drawings Summary
+                        </span>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="p-3 bg-white border border-gray-100 rounded-lg">
+                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block">
+                              Total Drawings
+                            </span>
+                            <span className="text-base font-bold text-darkgray mt-1 block">
+                              {totalDrawingsCount}
+                            </span>
+                          </div>
+                          <div className="p-3 bg-white border border-gray-100 rounded-lg">
+                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block">
+                              Approved
+                            </span>
+                            <span className="text-base font-bold text-emerald-600 mt-1 block">
+                              {approvedDrawingsCount}
+                            </span>
+                          </div>
+                          <div className="p-3 bg-white border border-gray-100 rounded-lg">
+                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block">
+                              Pending Approval
+                            </span>
+                            <span className="text-base font-bold text-amber-600 mt-1 block">
+                              {pendingDrawingsCount}
+                            </span>
+                          </div>
+                          <div className="p-3 bg-white border border-gray-100 rounded-lg min-w-0">
+                            <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block">
+                              Latest Upload
+                            </span>
+                            <span
+                              className="text-xs font-bold text-slate-800 mt-1 block truncate"
+                              title={latestUploadInfo}
+                            >
+                              {latestUploadInfo}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -2522,10 +3516,26 @@ export default function DesignWorkspace({
                   </h3>
                   <div className="flex items-center justify-between px-4 py-2 bg-palewhite rounded-2xl border border-gray-100 overflow-x-auto scroll-hidden-bar">
                     {[
-                      { key: "Pending", label: "Pending Submission", desc: "Package being prepared" },
-                      { key: "Sent", label: "Sent to Client", desc: "Sent, awaiting view" },
-                      { key: "Viewed", label: "Viewed", desc: "Opened by client" },
-                      { key: "Approved", label: "Approved", desc: "Proposal approved" },
+                      {
+                        key: "Pending",
+                        label: "Pending Submission",
+                        desc: "Package being prepared",
+                      },
+                      {
+                        key: "Sent",
+                        label: "Sent to Client",
+                        desc: "Sent, awaiting view",
+                      },
+                      {
+                        key: "Viewed",
+                        label: "Viewed",
+                        desc: "Opened by client",
+                      },
+                      {
+                        key: "Approved",
+                        label: "Approved",
+                        desc: "Proposal approved",
+                      },
                     ].map((step, sIdx) => {
                       const list = ["Pending", "Sent", "Viewed", "Approved"];
                       const currentIdx = list.indexOf(approvalStatus);
@@ -2535,16 +3545,25 @@ export default function DesignWorkspace({
                       const isCurrent = step.key === approvalStatus;
 
                       return (
-                        <div key={step.key} className="flex items-center flex-1 last:flex-none">
+                        <div
+                          key={step.key}
+                          className="flex items-center flex-1 last:flex-none"
+                        >
                           <div className="flex flex-col items-center gap-1.5 shrink-0 text-center px-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border transition-all ${
-                              isPassed ? "bg-emerald-500 text-white border-emerald-600" :
-                              isCurrent ? "bg-select-blue text-white border-select-blue shadow-md ring-4 ring-blue-50" :
-                              "bg-white text-gray-400 border-gray-200"
-                            }`}>
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border transition-all ${
+                                isPassed
+                                  ? "bg-emerald-500 text-white border-emerald-600"
+                                  : isCurrent
+                                    ? "bg-select-blue text-white border-select-blue shadow-md ring-4 ring-blue-50"
+                                    : "bg-white text-gray-400 border-gray-200"
+                              }`}
+                            >
                               {isPassed ? "✓" : sIdx + 1}
                             </div>
-                            <span className={`text-[10px] font-bold ${isCurrent ? "text-select-blue" : "text-gray-500"}`}>
+                            <span
+                              className={`text-[10px] font-bold ${isCurrent ? "text-select-blue" : "text-gray-500"}`}
+                            >
                               {step.label}
                             </span>
                             <span className="text-[8px] text-gray-400 hidden md:block">
@@ -2552,9 +3571,13 @@ export default function DesignWorkspace({
                             </span>
                           </div>
                           {sIdx < 3 && (
-                            <div className="flex-1 h-[2px] bg-gray-200 mx-2 min-w-[20px]" style={{
-                              backgroundColor: stepIdx < currentIdx ? "#10b981" : "#e5e7eb"
-                            }} />
+                            <div
+                              className="flex-1 h-[2px] bg-gray-200 mx-2 min-w-[20px]"
+                              style={{
+                                backgroundColor:
+                                  stepIdx < currentIdx ? "#10b981" : "#e5e7eb",
+                              }}
+                            />
                           )}
                         </div>
                       );
@@ -2589,7 +3612,10 @@ export default function DesignWorkspace({
                         Reminders Sent
                       </span>
                       <p className="text-sm font-bold text-gray-800 mt-1">
-                        {remindersSentCount} {lastReminderSentDate ? `(Last: ${lastReminderSentDate})` : ""}
+                        {remindersSentCount}{" "}
+                        {lastReminderSentDate
+                          ? `(Last: ${lastReminderSentDate})`
+                          : ""}
                       </p>
                     </div>
                     <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-left">
@@ -2632,11 +3658,17 @@ export default function DesignWorkspace({
                       type="checkbox"
                       id="digital-ack-check"
                       checked={digitalAcknowledgementVerified}
-                      onChange={(e) => setDigitalAcknowledgementVerified(e.target.checked)}
+                      onChange={(e) =>
+                        setDigitalAcknowledgementVerified(e.target.checked)
+                      }
                       className="w-4 h-4 text-select-blue rounded border-gray-300 focus:ring-select-blue cursor-pointer"
                     />
-                    <label htmlFor="digital-ack-check" className="text-xs font-bold text-darkgray cursor-pointer">
-                      Digital Acknowledgement Verified (Client has acknowledged and signed terms)
+                    <label
+                      htmlFor="digital-ack-check"
+                      className="text-xs font-bold text-darkgray cursor-pointer"
+                    >
+                      Digital Acknowledgement Verified (Client has acknowledged
+                      and signed terms)
                     </label>
                   </div>
                 </div>
@@ -2659,20 +3691,36 @@ export default function DesignWorkspace({
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                           {approvalHistory.map((sub, sIdx) => (
-                            <tr key={sub.id || sIdx} className="hover:bg-palewhite/30 transition-colors">
-                              <td className="p-3 font-semibold text-gray-500">{sub.date}</td>
-                              <td className="p-3 font-bold text-slate-800">{sub.submittedBy}</td>
-                              <td className="p-3 text-gray-500 font-medium truncate max-w-[250px]" title={sub.notes}>
+                            <tr
+                              key={sub.id || sIdx}
+                              className="hover:bg-palewhite/30 transition-colors"
+                            >
+                              <td className="p-3 font-semibold text-gray-500">
+                                {sub.date}
+                              </td>
+                              <td className="p-3 font-bold text-slate-800">
+                                {sub.submittedBy}
+                              </td>
+                              <td
+                                className="p-3 text-gray-500 font-medium truncate max-w-[250px]"
+                                title={sub.notes}
+                              >
                                 {sub.notes}
                               </td>
                               <td className="p-3">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
-                                  sub.status === "Approved" ? "bg-emerald-50 border-emerald-100 text-emerald-700" :
-                                  sub.status === "Sent" ? "bg-blue-50 border-blue-100 text-blue-700" :
-                                  sub.status === "Viewed" ? "bg-indigo-50 border-indigo-100 text-indigo-700" :
-                                  sub.status === "Changes Requested" ? "bg-amber-50 border-amber-100 text-amber-700" :
-                                  "bg-gray-150 text-gray-500"
-                                }`}>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                                    sub.status === "Approved"
+                                      ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+                                      : sub.status === "Sent"
+                                        ? "bg-blue-50 border-blue-100 text-blue-700"
+                                        : sub.status === "Viewed"
+                                          ? "bg-indigo-50 border-indigo-100 text-indigo-700"
+                                          : sub.status === "Changes Requested"
+                                            ? "bg-amber-50 border-amber-100 text-amber-700"
+                                            : "bg-gray-150 text-gray-500"
+                                  }`}
+                                >
                                   {sub.status}
                                 </span>
                               </td>
@@ -2687,13 +3735,11 @@ export default function DesignWorkspace({
                     </p>
                   )}
                 </div>
-
-                {/* Client Feedback Thread */}
-                <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-darkgray border-b border-gray-100 pb-3 mb-4">
+                <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left flex flex-col h-[500px]">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-darkgray border-b border-gray-100 pb-3 mb-4 shrink-0">
                     Client Feedback Thread
                   </h3>
-                  <div className="space-y-4 max-h-[350px] overflow-y-auto mb-4 p-2 scroll-hidden-bar">
+                  <div className="space-y-4 flex-1 overflow-y-auto mb-4 p-2 scroll-hidden-bar">
                     {discussionHistory.map((msg, idx) => {
                       const isClient = msg.author.toLowerCase() === "client";
                       return (
@@ -2722,11 +3768,12 @@ export default function DesignWorkspace({
                         </div>
                       );
                     })}
+                    <div ref={clientFeedbackBottomRef} />
                   </div>
 
                   <form
                     onSubmit={handleAddClientFeedback}
-                    className="flex gap-2 items-center"
+                    className="flex gap-2 items-center shrink-0 border-t border-gray-100 pt-3 bg-white sticky bottom-0"
                   >
                     <select
                       value={feedbackAuthor}
@@ -2794,7 +3841,10 @@ export default function DesignWorkspace({
                     </button>
                     <button
                       onClick={handleSendReminder}
-                      disabled={approvalStatus === "Pending" || approvalStatus === "Approved"}
+                      disabled={
+                        approvalStatus === "Pending" ||
+                        approvalStatus === "Approved"
+                      }
                       className="px-5 py-2.5 bg-indigo-50 border border-indigo-150 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl cursor-pointer transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed disabled:border-gray-200"
                     >
                       Send Reminder
@@ -2817,10 +3867,9 @@ export default function DesignWorkspace({
         </div>
 
         {/* Right Column: Internal Comments, Design Activities Feed (1/3 width) */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1 pb-8">
-          {/* Internal Team Discussion Card */}
-          <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-3">
+        <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1">
+          <div className="bg-white rounded-[20px] p-6 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.03)] text-left flex flex-col h-[500px]">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-3 shrink-0">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
                 Internal Team Comments
               </h3>
@@ -2831,7 +3880,7 @@ export default function DesignWorkspace({
               )}
             </div>
 
-            <div className="space-y-3 max-h-96 overflow-y-auto mb-3 scroll-hidden-bar">
+            <div className="space-y-3 flex-1 overflow-y-auto mb-3 pr-1 scroll-hidden-bar">
               {internalComments.map((comment) => {
                 const isPinned = comment.isPinned;
                 const isResolved = comment.isResolved;
@@ -2840,7 +3889,9 @@ export default function DesignWorkspace({
                   <div
                     key={comment.id}
                     className={`p-3 border rounded-xl transition-all ${
-                      isPinned ? "bg-amber-50/40 border-amber-200 shadow-sm" : "bg-palewhite border-gray-100"
+                      isPinned
+                        ? "bg-amber-50/40 border-amber-200 shadow-sm"
+                        : "bg-palewhite border-gray-100"
                     } ${isResolved ? "opacity-60" : ""}`}
                   >
                     <div className="flex justify-between items-center mb-1">
@@ -2849,12 +3900,17 @@ export default function DesignWorkspace({
                           {comment.author}
                         </span>
                         {comment.statusNote && (
-                          <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase border ${
-                            comment.statusNote === "Important" ? "bg-red-50 text-red-700 border-red-100" :
-                            comment.statusNote === "Feedback" ? "bg-blue-50 text-select-blue border-blue-100" :
-                            comment.statusNote === "Resolved" ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                            "bg-gray-100 text-gray-600 border-gray-200"
-                          }`}>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[8px] font-bold uppercase border ${
+                              comment.statusNote === "Important"
+                                ? "bg-red-50 text-red-700 border-red-100"
+                                : comment.statusNote === "Feedback"
+                                  ? "bg-blue-50 text-select-blue border-blue-100"
+                                  : comment.statusNote === "Resolved"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                    : "bg-gray-100 text-gray-600 border-gray-200"
+                            }`}
+                          >
                             {comment.statusNote}
                           </span>
                         )}
@@ -2868,15 +3924,25 @@ export default function DesignWorkspace({
                     </p>
 
                     {/* Replies array */}
-                    {comment.replies && comment.replies.map((rep) => (
-                      <div key={rep.id} className="ml-4 mt-2 p-2 bg-white border border-gray-100 rounded-lg text-[10px] text-left">
-                        <div className="flex justify-between items-center mb-0.5">
-                          <span className="font-bold text-slate-700">{rep.author}</span>
-                          <span className="text-gray-400 text-[8px]">{rep.timestamp}</span>
+                    {comment.replies &&
+                      comment.replies.map((rep) => (
+                        <div
+                          key={rep.id}
+                          className="ml-4 mt-2 p-2 bg-white border border-gray-100 rounded-lg text-[10px] text-left"
+                        >
+                          <div className="flex justify-between items-center mb-0.5">
+                            <span className="font-bold text-slate-700">
+                              {rep.author}
+                            </span>
+                            <span className="text-gray-400 text-[8px]">
+                              {rep.timestamp}
+                            </span>
+                          </div>
+                          <p className="text-gray-600 font-medium">
+                            {renderCommentText(rep.text)}
+                          </p>
                         </div>
-                        <p className="text-gray-600 font-medium">{renderCommentText(rep.text)}</p>
-                      </div>
-                    ))}
+                      ))}
 
                     {/* Inline reply form */}
                     {activeReplyCommentId === comment.id && (
@@ -2900,12 +3966,18 @@ export default function DesignWorkspace({
                     <div className="flex justify-end items-center gap-3 border-t border-gray-200/50 pt-1.5 mt-2 text-[9px] font-bold text-gray-450 uppercase">
                       <button
                         onClick={() => {
-                          setActiveReplyCommentId(comment.id === activeReplyCommentId ? null : comment.id);
+                          setActiveReplyCommentId(
+                            comment.id === activeReplyCommentId
+                              ? null
+                              : comment.id,
+                          );
                           setReplyText("");
                         }}
                         className="hover:text-select-blue transition-colors"
                       >
-                        {activeReplyCommentId === comment.id ? "Cancel" : "Reply"}
+                        {activeReplyCommentId === comment.id
+                          ? "Cancel"
+                          : "Reply"}
                       </button>
                       <button
                         onClick={() => handleTogglePinComment(comment.id)}
@@ -2923,9 +3995,13 @@ export default function DesignWorkspace({
                   </div>
                 );
               })}
+              <div ref={internalCommentsBottomRef} />
             </div>
 
-            <form onSubmit={handleAddComment} className="flex flex-col gap-2">
+            <form
+              onSubmit={handleAddComment}
+              className="flex flex-col gap-2 shrink-0 border-t border-gray-100 pt-3 bg-white sticky bottom-0"
+            >
               <div className="flex gap-2">
                 <select
                   value={commentStatusNote}
@@ -2969,8 +4045,15 @@ export default function DesignWorkspace({
                   <div>
                     <span className="font-bold text-darkgray block">
                       {act.text}
+                      {act.user && (
+                        <span className="text-[9px] text-gray-400 font-medium ml-1">
+                          · by {act.user}
+                        </span>
+                      )}
                     </span>
-                    <span className="text-gray-400 text-[8px]">{act.time}</span>
+                    <span className="text-gray-400 text-[8px]">
+                      {act.timestamp || act.time}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -2988,6 +4071,9 @@ export default function DesignWorkspace({
                 setShowUploadModal(false);
                 setModalDrawingFile(null);
                 setDrawName("");
+                setShowAddNewDrawNamePopover(false);
+                setNewCustomDrawName("");
+                setCustomDrawNameError("");
               }}
               className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
             >
@@ -3000,25 +4086,81 @@ export default function DesignWorkspace({
 
             <form onSubmit={handleUploadDrawing} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-darkgray mb-1">
-                  Drawing Name
-                </label>
-                <select
-                  required
-                  value={drawName}
-                  onChange={(e) => setDrawName(e.target.value)}
-                  className="w-full text-xs bg-light-gray border border-bordergray rounded-lg px-3 py-2 focus:outline-none focus:border-gray-300 cursor-pointer"
-                >
-                  <option value="">Select Drawing Type...</option>
-                  <option value="Floor Plan">Floor Plan</option>
-                  <option value="Furniture Layout">Furniture Layout</option>
-                  <option value="Electrical Layout">Electrical Layout</option>
-                  <option value="Ceiling Layout">Ceiling Layout</option>
-                  <option value="Living Room Render">Living Room Render</option>
-                  <option value="Kitchen Render">Kitchen Render</option>
-                  <option value="Bedroom Render">Bedroom Render</option>
-                  <option value="Bathroom Render">Bathroom Render</option>
-                </select>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-darkgray">
+                    Drawing Name
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddNewDrawNamePopover(true);
+                      setNewCustomDrawName("");
+                      setCustomDrawNameError("");
+                    }}
+                    className="text-[10px] font-bold text-select-blue hover:underline cursor-pointer flex items-center gap-0.5"
+                  >
+                    <FiPlus size={10} />
+                    <span>Add New</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <SearchableSelect
+                    value={drawName}
+                    onChange={(val) => setDrawName(val)}
+                    options={drawingNameOptions}
+                    placeholder="Select Drawing Type..."
+                    className="w-full text-xs bg-light-gray border border-bordergray rounded-lg px-3 py-2.5 focus:outline-none focus:border-gray-300 cursor-pointer font-semibold"
+                  />
+
+                  {/* Inline Popover to Add New Drawing Name */}
+                  {showAddNewDrawNamePopover && (
+                    <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg p-3 shadow-lg text-left">
+                      <div className="text-[10px] font-bold text-darkgray uppercase tracking-wider mb-2">
+                        Add New Drawing Name
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="text"
+                          value={newCustomDrawName}
+                          onChange={(e) => {
+                            setNewCustomDrawName(e.target.value);
+                            setCustomDrawNameError("");
+                          }}
+                          placeholder="e.g. Balcony Layout..."
+                          className="w-full text-xs bg-light-gray border border-gray-205 rounded-md px-3 py-2 focus:outline-none focus:border-gray-300 text-darkgray font-medium"
+                          autoFocus
+                        />
+                        {customDrawNameError && (
+                          <span className="text-[9px] text-red-500 font-bold">
+                            {customDrawNameError}
+                          </span>
+                        )}
+                        <div className="flex justify-end gap-1.5 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddNewDrawNamePopover(false);
+                              setNewCustomDrawName("");
+                              setCustomDrawNameError("");
+                            }}
+                            className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-bold rounded cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveCustomDrawingName}
+                            className="px-2.5 py-1 bg-select-blue hover:bg-blue-900 text-white text-[10px] font-bold rounded cursor-pointer"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <p className="text-[9px] text-gray-400 mt-1 font-medium">
                   Note: If drawing type matches an existing drawing, it will be
                   uploaded as a new version in history.
@@ -3144,6 +4286,22 @@ export default function DesignWorkspace({
                 )}
               </div>
 
+              <div className="flex items-center gap-2 pt-1 pb-3">
+                <input
+                  type="checkbox"
+                  id="drawVisibleToClient"
+                  checked={drawVisibleToClient}
+                  onChange={(e) => setDrawVisibleToClient(e.target.checked)}
+                  className="w-4 h-4 rounded text-select-blue focus:ring-select-blue cursor-pointer"
+                />
+                <label
+                  htmlFor="drawVisibleToClient"
+                  className="text-xs font-bold text-darkgray cursor-pointer select-none"
+                >
+                  Visible to Client
+                </label>
+              </div>
+
               <button
                 type="submit"
                 disabled={!modalDrawingFile}
@@ -3203,7 +4361,10 @@ export default function DesignWorkspace({
                         >
                           {v.name}
                         </td>
-                        <td className="p-3 font-semibold text-gray-500 italic truncate max-w-[150px]" title={v.changeNotes}>
+                        <td
+                          className="p-3 font-semibold text-gray-500 italic truncate max-w-[150px]"
+                          title={v.changeNotes}
+                        >
                           {v.changeNotes || "No change notes."}
                         </td>
                         <td className="p-3 text-gray-500 font-semibold">
@@ -3309,7 +4470,10 @@ export default function DesignWorkspace({
                         >
                           {v.name}
                         </td>
-                        <td className="p-3 font-semibold text-gray-500 italic truncate max-w-[150px]" title={v.changeNotes}>
+                        <td
+                          className="p-3 font-semibold text-gray-500 italic truncate max-w-[150px]"
+                          title={v.changeNotes}
+                        >
                           {v.changeNotes || "No change notes."}
                         </td>
                         <td className="p-3 text-gray-500 font-semibold">
@@ -3326,16 +4490,18 @@ export default function DesignWorkspace({
                                   .split(".")
                                   .pop()
                                   .toLowerCase();
+                                const verKey = `${selectedReferenceFileForHistory.id}-${v.version}`;
+                                const fileUrl = localUrls[verKey] || v.url;
                                 if (
                                   ["png", "jpg", "jpeg", "webp"].includes(ext)
                                 ) {
                                   onExpandPhoto(
-                                    [v.url],
+                                    [fileUrl],
                                     0,
                                     `${selectedReferenceFileForHistory.name} (${v.version})`,
                                   );
                                 } else {
-                                  window.open(v.url, "_blank");
+                                  window.open(fileUrl, "_blank");
                                 }
                               }}
                               className="p-1 hover:text-select-blue bg-white border border-gray-200 hover:border-select-blue rounded transition-all cursor-pointer"
@@ -3346,7 +4512,8 @@ export default function DesignWorkspace({
                             <button
                               onClick={() => {
                                 const a = document.createElement("a");
-                                a.href = v.url;
+                                const verKey = `${selectedReferenceFileForHistory.id}-${v.version}`;
+                                a.href = localUrls[verKey] || v.url;
                                 a.download = v.name;
                                 document.body.appendChild(a);
                                 a.click();
@@ -3383,14 +4550,19 @@ export default function DesignWorkspace({
               Review drawing proposal
             </h3>
             <p className="text-xs text-gray-400 font-semibold mb-4">
-              Drawing: {selectedDrawingForReview.name} ({selectedDrawingForReview.version})
+              Drawing: {selectedDrawingForReview.name} (
+              {selectedDrawingForReview.version})
             </p>
 
             <ReviewDrawingForm
               supervisors={SUPERVISORS_LIST}
-              currentReviewer={selectedDrawingForReview.reviewer || "Vijay K. (Supervisor)"}
+              currentReviewer={
+                selectedDrawingForReview.reviewer || "Vijay K. (Supervisor)"
+              }
               currentComments={selectedDrawingForReview.reviewComments}
-              onSubmit={(reviewer, comments, status) => handleReviewDrawingSubmit(reviewer, comments, status)}
+              onSubmit={(reviewer, comments, status) =>
+                handleReviewDrawingSubmit(reviewer, comments, status)
+              }
             />
           </div>
         </div>
@@ -3412,6 +4584,18 @@ export default function DesignWorkspace({
             <p className="text-xs text-gray-400 font-semibold mb-4">
               Requested By: {selectedRevisionForDetails.requestedBy} on{" "}
               {selectedRevisionForDetails.date}
+              {selectedRevisionForDetails.status === "Completed" && (
+                <>
+                  <span className="block mt-1">
+                    Completed By:{" "}
+                    {selectedRevisionForDetails.completedBy ||
+                      "Priya S. (Designer)"}{" "}
+                    on{" "}
+                    {selectedRevisionForDetails.completedDate ||
+                      selectedRevisionForDetails.date}
+                  </span>
+                </>
+              )}
             </p>
 
             <div className="space-y-4 text-xs">
@@ -3448,14 +4632,30 @@ export default function DesignWorkspace({
                 </span>
                 <textarea
                   rows={2}
+                  disabled={
+                    selectedRevisionForDetails.status === "Awaiting Payment"
+                  }
                   value={selectedRevisionForDetails.resolutionNotes || ""}
                   onChange={(e) => {
                     const text = e.target.value;
-                    setRevisions(prev => prev.map(r => r.id === selectedRevisionForDetails.id ? { ...r, resolutionNotes: text } : r));
-                    setSelectedRevisionForDetails(prev => ({ ...prev, resolutionNotes: text }));
+                    setRevisions((prev) =>
+                      prev.map((r) =>
+                        r.id === selectedRevisionForDetails.id
+                          ? { ...r, resolutionNotes: text }
+                          : r,
+                      ),
+                    );
+                    setSelectedRevisionForDetails((prev) => ({
+                      ...prev,
+                      resolutionNotes: text,
+                    }));
                   }}
-                  placeholder="Enter details on how this request was resolved/addressed..."
-                  className="w-full text-xs bg-light-gray border border-bordergray rounded-xl p-2.5 focus:outline-none focus:border-gray-300 resize-none"
+                  placeholder={
+                    selectedRevisionForDetails.status === "Awaiting Payment"
+                      ? "Locked: Client payment is awaiting."
+                      : "Enter details on how this request was resolved/addressed..."
+                  }
+                  className="w-full text-xs bg-light-gray border border-bordergray rounded-xl p-2.5 focus:outline-none focus:border-gray-300 resize-none disabled:opacity-50"
                 />
               </div>
 
@@ -3464,42 +4664,64 @@ export default function DesignWorkspace({
                   <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
                     Resolved / Updated Files
                   </span>
-                  <ReusableFileUploader
-                    allowedTypes={["PDF", "DOC", "DOCX", "JPG", "PNG", "ZIP"]}
-                    maxSizeMB={50}
-                    onUploadSuccess={(fileObj) => {
-                      const newFile = {
-                        ...fileObj,
-                        versions: [
-                          {
-                            version: "V1",
-                            name: fileObj.name,
-                            url: fileObj.url,
-                            uploadedBy: "Priya S. (Designer)",
-                            uploadDate: new Date().toLocaleDateString("en-IN"),
-                            fileSize: formatBytes(fileObj.size),
-                            size: fileObj.size,
-                            changeNotes: "Resolved revision updated drawing.",
-                          }
-                        ]
-                      };
-                      setRevisions(prev => prev.map(r => {
-                        if (r.id === selectedRevisionForDetails.id) {
-                          const updatedFiles = [...(r.attachedFiles || []), newFile];
-                          return { ...r, attachedFiles: updatedFiles };
-                        }
-                        return r;
-                      }));
-                      setSelectedRevisionForDetails(prev => ({
-                        ...prev,
-                        attachedFiles: [...(prev.attachedFiles || []), newFile]
-                      }));
-                      addActivity("Uploaded resolved drawing to revision request", "Priya S. (Designer)");
-                      addNotification("Resolved file uploaded to revision", "success");
-                    }}
-                    uploadedBy="Priya S. (Designer)"
-                    buttonText="Upload File"
-                  />
+                  {selectedRevisionForDetails.status === "Awaiting Payment" ? (
+                    <span className="text-[10px] text-rose-500 font-bold">
+                      Upload Disabled (Awaiting Payment)
+                    </span>
+                  ) : (
+                    <ReusableFileUploader
+                      allowedTypes={["PDF", "DOC", "DOCX", "JPG", "PNG", "ZIP"]}
+                      maxSizeMB={50}
+                      onUploadSuccess={(fileObj) => {
+                        const newFile = {
+                          ...fileObj,
+                          versions: [
+                            {
+                              version: "V1",
+                              name: fileObj.name,
+                              url: fileObj.url,
+                              uploadedBy: "Priya S. (Designer)",
+                              uploadDate: new Date().toLocaleDateString(
+                                "en-IN",
+                              ),
+                              fileSize: formatBytes(fileObj.size),
+                              size: fileObj.size,
+                              changeNotes: "Resolved revision updated drawing.",
+                            },
+                          ],
+                        };
+                        setRevisions((prev) =>
+                          prev.map((r) => {
+                            if (r.id === selectedRevisionForDetails.id) {
+                              const updatedFiles = [
+                                ...(r.attachedFiles || []),
+                                newFile,
+                              ];
+                              return { ...r, attachedFiles: updatedFiles };
+                            }
+                            return r;
+                          }),
+                        );
+                        setSelectedRevisionForDetails((prev) => ({
+                          ...prev,
+                          attachedFiles: [
+                            ...(prev.attachedFiles || []),
+                            newFile,
+                          ],
+                        }));
+                        addActivity(
+                          "Uploaded resolved drawing to revision request",
+                          "Priya S. (Designer)",
+                        );
+                        addNotification(
+                          "Resolved file uploaded to revision",
+                          "success",
+                        );
+                      }}
+                      uploadedBy="Priya S. (Designer)"
+                      buttonText="Upload File"
+                    />
+                  )}
                 </div>
                 {selectedRevisionForDetails.attachedFiles &&
                 selectedRevisionForDetails.attachedFiles.length > 0 ? (
@@ -3524,12 +4746,13 @@ export default function DesignWorkspace({
                           <button
                             onClick={() => {
                               const ext = file.type.toLowerCase();
+                              const fileUrl = localUrls[file.id] || file.url;
                               if (
                                 ["png", "jpg", "jpeg", "webp"].includes(ext)
                               ) {
-                                onExpandPhoto([file.url], 0, file.name);
+                                onExpandPhoto([fileUrl], 0, file.name);
                               } else {
-                                window.open(file.url, "_blank");
+                                window.open(fileUrl, "_blank");
                               }
                             }}
                             className="p-1 hover:text-select-blue bg-white border border-gray-150 rounded cursor-pointer animate-all"
@@ -3540,7 +4763,7 @@ export default function DesignWorkspace({
                           <button
                             onClick={() => {
                               const a = document.createElement("a");
-                              a.href = file.url;
+                              a.href = localUrls[file.id] || file.url;
                               a.download = file.name;
                               document.body.appendChild(a);
                               a.click();
@@ -3593,7 +4816,8 @@ export default function DesignWorkspace({
                   </div>
                 ) : (
                   <p className="text-gray-400 italic text-center py-2 bg-palewhite rounded-xl border border-gray-100">
-                    No files uploaded yet. (Updated drawing file required to mark completed)
+                    No files uploaded yet. (Updated drawing file required to
+                    mark completed)
                   </p>
                 )}
               </div>
@@ -3602,43 +4826,83 @@ export default function DesignWorkspace({
                 <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block mb-2">
                   Action Status
                 </span>
-                <div className="flex gap-2">
-                  {selectedRevisionForDetails.status !== "In Progress" && selectedRevisionForDetails.status !== "Completed" && (
-                    <button
-                      onClick={() => {
-                        handleUpdateRevisionStatus(selectedRevisionForDetails.id, "In Progress");
-                        setSelectedRevisionForDetails(prev => ({ ...prev, status: "In Progress" }));
-                      }}
-                      className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                    >
-                      Mark In Progress
-                    </button>
-                  )}
-                  {selectedRevisionForDetails.status !== "Completed" && (
-                    <button
-                      onClick={() => {
-                        if (!selectedRevisionForDetails.resolutionNotes?.trim()) {
-                          setModalAlert({ message: "Please enter resolution notes detailing the changes made before completing." });
-                          return;
-                        }
-                        if (!selectedRevisionForDetails.attachedFiles || selectedRevisionForDetails.attachedFiles.length === 0) {
-                          setModalAlert({ message: "Please upload at least one updated/resolved drawing file to complete." });
-                          return;
-                        }
-                        handleUpdateRevisionStatus(selectedRevisionForDetails.id, "Completed");
-                        setSelectedRevisionForDetails(prev => ({ ...prev, status: "Completed" }));
-                      }}
-                      className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg cursor-pointer transition-colors"
-                    >
-                      Mark Completed
-                    </button>
-                  )}
-                  {selectedRevisionForDetails.status === "Completed" && (
-                    <span className="text-emerald-700 font-bold flex items-center gap-1">
-                      ✓ Resolved & Completed
+                {selectedRevisionForDetails.status === "Awaiting Payment" ? (
+                  <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-xl p-3 text-rose-700 font-bold text-xs">
+                    <span className="animate-pulse">⚠️</span>
+                    <span>Blocked: Payment Awaiting</span>
+                    <span className="text-[10px] font-semibold text-rose-500">
+                      (Client must clear the additional revision invoice in the
+                      portal)
                     </span>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    {selectedRevisionForDetails.status !== "In Progress" &&
+                      selectedRevisionForDetails.status !== "Completed" && (
+                        <button
+                          onClick={() => {
+                            handleUpdateRevisionStatus(
+                              selectedRevisionForDetails.id,
+                              "In Progress",
+                            );
+                            setSelectedRevisionForDetails((prev) => ({
+                              ...prev,
+                              status: "In Progress",
+                            }));
+                          }}
+                          className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
+                        >
+                          Mark In Progress
+                        </button>
+                      )}
+                    {selectedRevisionForDetails.status !== "Completed" && (
+                      <button
+                        onClick={() => {
+                          if (
+                            !selectedRevisionForDetails.resolutionNotes?.trim()
+                          ) {
+                            setModalAlert({
+                              message:
+                                "Please enter resolution notes detailing the changes made before completing.",
+                            });
+                            return;
+                          }
+                          if (
+                            !selectedRevisionForDetails.attachedFiles ||
+                            selectedRevisionForDetails.attachedFiles.length ===
+                              0
+                          ) {
+                            setModalAlert({
+                              message:
+                                "Please upload at least one updated/resolved drawing file to complete.",
+                            });
+                            return;
+                          }
+                          handleUpdateRevisionStatus(
+                            selectedRevisionForDetails.id,
+                            "Completed",
+                          );
+                          setSelectedRevisionForDetails((prev) => ({
+                            ...prev,
+                            status: "Completed",
+                            completedDate: new Date().toLocaleDateString(
+                              "en-IN",
+                            ),
+                            completedBy: "Priya S. (Designer)",
+                          }));
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg cursor-pointer transition-colors"
+                      >
+                        Mark Completed
+                      </button>
+                    )}
+                    {selectedRevisionForDetails.status === "Completed" && (
+                      <span className="text-emerald-700 font-bold flex items-center gap-1">
+                        ✓ Resolved & Completed
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -3739,15 +5003,196 @@ export default function DesignWorkspace({
         </div>
       )}
 
+      {/* REFERENCE FILE UPLOAD MODAL */}
+      {showRefUploadModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4 animate-fade-in">
+          <div className="bg-white rounded-[20px] shadow-2xl w-full max-w-[650px] p-6 relative text-left border border-gray-100 max-h-[90vh] flex flex-col overflow-hidden">
+            <button
+              onClick={() => {
+                setShowRefUploadModal(false);
+                setRefUploadCategory("");
+                setRefUploadFiles([]);
+              }}
+              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <FiX size={16} />
+            </button>
+
+            <h3 className="text-base font-bold text-darkgray mb-1">
+              Upload Reference Files
+            </h3>
+            <p className="text-xs text-gray-400 font-semibold mb-6">
+              Add files to help in the design process.
+            </p>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-6">
+              {/* Category Field */}
+              <div className="flex flex-col">
+                <label className="mb-2 text-xs font-bold text-darkgray uppercase tracking-wider flex items-center gap-1">
+                  Category <span className="text-red-500">*</span>
+                </label>
+                <SearchableSelect
+                  value={refUploadCategory}
+                  onChange={(val) => setRefUploadCategory(val)}
+                  options={getRoomCategories()}
+                  className="w-full text-xs bg-light-gray border border-bordergray rounded-lg px-3 py-2.5 focus:outline-none focus:border-gray-300 cursor-pointer font-semibold"
+                  placeholder="Select a room / space category..."
+                />
+              </div>
+
+              {/* Drag and Drop Zone */}
+              <div className="flex flex-col">
+                <label className="mb-2 text-xs font-bold text-darkgray uppercase tracking-wider">
+                  Upload Files <span className="text-red-500">*</span>
+                </label>
+                
+                <div
+                  onDragEnter={handleRefDragEnter}
+                  onDragOver={handleRefDragOver}
+                  onDragLeave={handleRefDragLeave}
+                  onDrop={handleRefDropFiles}
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                    isDragging
+                      ? "border-select-blue bg-blue-50/20 shadow-inner scale-[0.99]"
+                      : "border-gray-200 bg-slate-50/50 hover:border-select-blue hover:bg-blue-50/10"
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    multiple
+                    onChange={handleFileSelectChange}
+                    accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-select-blue mb-1">
+                      <FiUploadCloud size={24} />
+                    </div>
+                    <p className="text-xs font-bold text-darkgray">
+                      Drag & drop reference files here, or <span className="text-select-blue underline">browse</span>
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-semibold">
+                      Supports JPG, PNG, WEBP, PDF, DOC, DOCX up to 50MB
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Uploaded files preview list */}
+              {refUploadFiles.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-darkgray uppercase tracking-wider">
+                    Uploaded Files ({refUploadFiles.length})
+                  </h4>
+                  <div className="border border-gray-100 rounded-xl divide-y divide-gray-150 overflow-hidden">
+                    {refUploadFiles.map((f) => {
+                      const isImg = ["JPG", "JPEG", "PNG", "WEBP"].includes(f.type);
+                      return (
+                        <div key={f.id} className="p-3 bg-palewhite/40 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {isImg ? (
+                              <img
+                                src={f.url}
+                                alt="Preview"
+                                className="w-10 h-10 object-cover rounded-lg border border-gray-100 shrink-0 bg-white"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 text-select-blue flex items-center justify-center shrink-0 text-xs font-bold">
+                                {f.type}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-darkgray truncate max-w-[250px]" title={f.name}>
+                                {f.name}
+                              </p>
+                              <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                                {formatBytes(f.size)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            {f.status === "uploading" ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400 font-semibold">
+                                  {f.progress}%
+                                </span>
+                                <div className="w-12 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-select-blue rounded-full transition-all duration-300"
+                                    style={{ width: `${f.progress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : f.status === "success" ? (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded uppercase tracking-wider">
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-red-700 bg-red-50 border border-red-150 px-2 py-0.5 rounded uppercase tracking-wider">
+                                Error
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveQueuedFile(f.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 bg-white border border-gray-150 rounded-lg hover:border-red-200 transition-all cursor-pointer"
+                              title="Remove"
+                            >
+                              <FiTrash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-150 pt-4 mt-6 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRefUploadModal(false);
+                  setRefUploadCategory("");
+                  setRefUploadFiles([]);
+                }}
+                className="px-4 py-2 border border-border text-xs font-bold text-darkgray hover:bg-bg-soft rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveReferenceFiles}
+                disabled={isSaveDisabled}
+                className="px-5 py-2 bg-select-blue hover:bg-blue-950 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Save Files
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Transient toast notifications list */}
       <div className="fixed bottom-4 right-4 z-150 space-y-2 pointer-events-none">
         {notifications.map((n) => (
-          <div key={n.id} className={`p-3 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2 pointer-events-auto animate-bounce bg-white ${
-            n.type === "success" ? "text-emerald-700 border-emerald-100 bg-emerald-50/90" :
-            n.type === "warning" ? "text-amber-700 border-amber-100 bg-amber-50/90" :
-            n.type === "error" ? "text-red-700 border-red-100 bg-red-50/90" :
-            "text-select-blue border-blue-100 bg-blue-50/90"
-          }`}>
+          <div
+            key={n.id}
+            className={`p-3 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2 pointer-events-auto animate-bounce bg-white ${
+              n.type === "success"
+                ? "text-emerald-700 border-emerald-100 bg-emerald-50/90"
+                : n.type === "warning"
+                  ? "text-amber-700 border-amber-100 bg-amber-50/90"
+                  : n.type === "error"
+                    ? "text-red-700 border-red-100 bg-red-50/90"
+                    : "text-select-blue border-blue-100 bg-blue-50/90"
+            }`}
+          >
             <span>{n.message}</span>
           </div>
         ))}
@@ -3757,7 +5202,12 @@ export default function DesignWorkspace({
 }
 
 // Subcomponent for Review Drawing Form
-function ReviewDrawingForm({ supervisors, currentReviewer, currentComments, onSubmit }) {
+function ReviewDrawingForm({
+  supervisors,
+  currentReviewer,
+  currentComments,
+  onSubmit,
+}) {
   const [reviewer, setReviewer] = useState(currentReviewer);
   const [comments, setComments] = useState(currentComments || "");
   const [status, setStatus] = useState("Approved");
@@ -3773,8 +5223,10 @@ function ReviewDrawingForm({ supervisors, currentReviewer, currentComments, onSu
           onChange={(e) => setReviewer(e.target.value)}
           className="w-full text-xs bg-light-gray border border-bordergray rounded-lg px-3 py-2 focus:outline-none cursor-pointer font-semibold"
         >
-          {supervisors.map(sup => (
-            <option key={sup} value={sup}>{sup}</option>
+          {supervisors.map((sup) => (
+            <option key={sup} value={sup}>
+              {sup}
+            </option>
           ))}
         </select>
       </div>
@@ -3798,10 +5250,22 @@ function ReviewDrawingForm({ supervisors, currentReviewer, currentComments, onSu
         </label>
         <div className="grid grid-cols-3 gap-2">
           {[
-            { key: "Approved", label: "Approve", color: "bg-emerald-500 hover:bg-emerald-600 text-white" },
-            { key: "Revision Required", label: "Req Revision", color: "bg-orange-500 hover:bg-orange-600 text-white" },
-            { key: "Rejected", label: "Reject", color: "bg-red-500 hover:bg-red-600 text-white" },
-          ].map(opt => (
+            {
+              key: "Approved",
+              label: "Approve",
+              color: "bg-emerald-500 hover:bg-emerald-600 text-white",
+            },
+            {
+              key: "Revision Required",
+              label: "Req Revision",
+              color: "bg-orange-500 hover:bg-orange-600 text-white",
+            },
+            {
+              key: "Rejected",
+              label: "Reject",
+              color: "bg-red-500 hover:bg-red-600 text-white",
+            },
+          ].map((opt) => (
             <button
               key={opt.key}
               type="button"
@@ -3822,7 +5286,8 @@ function ReviewDrawingForm({ supervisors, currentReviewer, currentComments, onSu
         </div>
       </div>
       <p className="text-[9px] text-gray-400 italic">
-        * Clicking any of the action buttons above will instantly submit this review decision.
+        * Clicking any of the action buttons above will instantly submit this
+        review decision.
       </p>
     </div>
   );

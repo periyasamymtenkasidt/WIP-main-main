@@ -232,6 +232,76 @@ const SiteDetail = () => {
           onExpandPhoto={handleExpandSurveyPhoto}
           navigate={navigate}
         />
+        {/* Lightbox / Zoom View */}
+        {lightboxImg && (
+          <div
+            className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 transition-all select-none"
+            onClick={() => setLightboxImg(null)}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setLightboxImg(null)}
+              className="absolute top-6 right-6 text-white/75 hover:text-white text-xs bg-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/20 transition-all font-semibold uppercase tracking-wider z-[210]"
+            >
+              ✕ Close View
+            </button>
+
+            {/* Left Arrow */}
+            {lightboxImg.images?.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxImg((prev) => ({
+                    ...prev,
+                    currentIndex:
+                      prev.currentIndex === 0
+                        ? prev.images.length - 1
+                        : prev.currentIndex - 1,
+                  }));
+                }}
+                className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 transition-all cursor-pointer z-[210]"
+              >
+                <FiChevronLeft size={24} />
+              </button>
+            )}
+
+            {/* Active Image */}
+            <img
+              src={lightboxImg.images[lightboxImg.currentIndex]}
+              alt={`${lightboxImg.title} view`}
+              className="max-w-[95vw] max-h-[85vh] object-contain rounded-lg shadow-2xl transition-transform duration-300"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Right Arrow */}
+            {lightboxImg.images?.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxImg((prev) => ({
+                    ...prev,
+                    currentIndex:
+                      prev.currentIndex === prev.images.length - 1
+                        ? 0
+                        : prev.currentIndex + 1,
+                  }));
+                }}
+                className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 transition-all cursor-pointer z-[210]"
+              >
+                <FiChevronRight size={24} />
+              </button>
+            )}
+
+            {/* Title & Caption */}
+            <h3 className="text-white font-bold text-base mt-6 tracking-wide">
+              {lightboxImg.title} (View {lightboxImg.currentIndex + 1} of{" "}
+              {lightboxImg.images.length})
+            </h3>
+            <p className="text-white/60 text-[10px] uppercase tracking-wider mt-1.5">
+              Workspace Design Attachment
+            </p>
+          </div>
+        )}
       </div>
     );
   }

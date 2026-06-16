@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import ProtectedRoute from "./ProtectedRoute";
 import ErrorBoundary from "../components/ErrorBoundary";
@@ -39,6 +39,16 @@ const BOQList = lazy(() => import("../pages/boq/BOQList"));
 const Settings = lazy(() => import("../pages/settings/Settings"));
 const BOQEditor = lazy(() => import("../pages/boq/BOQEditor"));
 
+// Client Portal Eagerly Loaded Routes
+const ClientPortalLayout = lazy(() => import("../layouts/ClientPortalLayout"));
+const PortalDashboard = lazy(() => import("../pages/clients/portal/PortalDashboard"));
+const PaymentMilestones = lazy(() => import("../pages/clients/portal/PaymentMilestones"));
+const ProjectQuotes = lazy(() => import("../pages/clients/portal/ProjectQuotes"));
+const SiteVisitsCalendar = lazy(() => import("../pages/clients/portal/SiteVisitsCalendar"));
+const DesignsRenders = lazy(() => import("../pages/clients/portal/DesignsRenders"));
+const SupportChat = lazy(() => import("../pages/clients/portal/SupportChat"));
+const GSTInvoice = lazy(() => import("../pages/clients/portal/GSTInvoice"));
+
 const LoadingFallback = () => (
   <div className="flex justify-center items-center h-screen">
   <div className="w-10 h-10 border-4 border-black/10 border-t-blue-500 rounded-full animate-spin"></div>
@@ -59,7 +69,7 @@ const AppRoutes = () => {
 
           {/* Client Portal Private Routes */}
           <Route element={<ClientProtectedRoute />}>
-            <Route path="/client/dashboard" element={<ClientDashboard />} />
+            <Route path="/client/dashboard/:clientId?" element={<ClientDashboard />} />
           </Route>
 
           <Route element={<ProtectedRoute />}>
@@ -100,6 +110,20 @@ const AppRoutes = () => {
               <Route path="settings" element={<Settings />} />
               <Route path="signout" element={<Signout />} />
               <Route path="*" element={<NotFound />} />
+            </Route>
+          </Route>
+
+          {/* Refactored Client Portal Routes */}
+          <Route element={<ClientProtectedRoute />}>
+            <Route path="/client-portal/:clientId?" element={<ClientPortalLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<PortalDashboard />} />
+              <Route path="payment-milestones" element={<PaymentMilestones />} />
+              <Route path="project-quotes" element={<ProjectQuotes />} />
+              <Route path="site-visits-calendar" element={<SiteVisitsCalendar />} />
+              <Route path="designs-renders" element={<DesignsRenders />} />
+              <Route path="support-chat" element={<SupportChat />} />
+              <Route path="gst-invoice" element={<GSTInvoice />} />
             </Route>
           </Route>
         </Routes>

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { FiPlus, FiAlertCircle, FiLoader } from "react-icons/fi";
+import { storeFile } from "../../../utils/fileStorage";
 
 export default function ReusableFileUploader({
   allowedTypes = [],
@@ -47,14 +48,14 @@ export default function ReusableFileUploader({
 
     // Process each valid file (simplified single-file progress or batch upload)
     let progress = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       progress += 20;
       setUploadProgress(progress);
 
       if (progress >= 100) {
         clearInterval(interval);
         
-        validFiles.forEach((file) => {
+        for (const file of validFiles) {
           let fileUrl = "";
           try {
             fileUrl = URL.createObjectURL(file);
@@ -63,9 +64,15 @@ export default function ReusableFileUploader({
             fileUrl = "/survey_living_room.png"; // Fallback placeholder
           }
 
+          const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+          
+          // Persist file in IndexedDB
+          await storeFile(fileId, file);
+          await storeFile(`${fileId}-V1`, file);
+
           const fileExtension = file.name.split(".").pop().toUpperCase();
           const uploadedFileObject = {
-            id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            id: fileId,
             name: file.name,
             type: fileExtension,
             uploadedBy: uploadedBy,
@@ -89,7 +96,7 @@ export default function ReusableFileUploader({
           if (onUploadSuccess) {
             onUploadSuccess(uploadedFileObject);
           }
-        });
+        }
 
         setIsUploading(false);
         setUploadProgress(0);
