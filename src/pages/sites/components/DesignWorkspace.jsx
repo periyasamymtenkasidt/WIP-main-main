@@ -47,24 +47,6 @@ const SUPERVISORS_LIST = [
   "Rahul G.",
 ];
 
-const SUGGESTED_ROOMS = [
-  "Pooja Room",
-  "Home Office",
-  "Study Room",
-  "Guest Room",
-  "Walk-in Wardrobe",
-  "Utility Area",
-  "Terrace",
-  "Conference Room",
-  "Living Room",
-  "Kitchen",
-  "Bedroom",
-  "Bathroom",
-  "Balcony",
-  "Dining Area",
-  "Other Spaces"
-];
-
 export default function DesignWorkspace({
   site,
   onSave,
@@ -73,7 +55,6 @@ export default function DesignWorkspace({
 }) {
   // 1. Initialize states from site object or defaults
   const [activeTab, setActiveTab] = useState("default-design"); // default-design, redesign, drawings, approval
-  const [roomModal, setRoomModal] = useState(null);
   const [conceptTitle, setConceptTitle] = useState(
     site.conceptTitle || "Scandinavian Cozy Minimalist",
   );
@@ -329,9 +310,6 @@ export default function DesignWorkspace({
       {
         id: "rev-1",
         date: "09.06.2026",
-        createdDate: "09-06-2026",
-        completedDate: "12-06-2026",
-        completedBy: "Priya S.",
         requestedBy: "Client (Ankit)",
         category: "Space Layout",
         description:
@@ -1215,11 +1193,6 @@ export default function DesignWorkspace({
       : (defaultDesignProgress + drawingsProgress + approvalProgress) / 3,
   );
 
-  const feedbackEndRef = useRef(null);
-  useEffect(() => {
-    feedbackEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [discussionHistory]);
-
   // Save site details with compatibility sync
   useEffect(() => {
     let active = true;
@@ -1304,36 +1277,6 @@ export default function DesignWorkspace({
     clientNotifications,
   ]);
 
-  // Sync external changes (e.g. from Client Portal) to local workspace states
-  useEffect(() => {
-    if (site) {
-      if (site.revisions && JSON.stringify(site.revisions) !== JSON.stringify(revisions)) {
-        setRevisions(site.revisions);
-      }
-      if (site.discussionHistory && JSON.stringify(site.discussionHistory) !== JSON.stringify(discussionHistory)) {
-        setDiscussionHistory(site.discussionHistory);
-      }
-      if (site.drawings && JSON.stringify(site.drawings) !== JSON.stringify(drawings)) {
-        setDrawings(site.drawings);
-      }
-      if (site.referenceFiles && JSON.stringify(site.referenceFiles) !== JSON.stringify(referenceFiles)) {
-        setReferenceFiles(site.referenceFiles);
-      }
-      if (site.designStatus && site.designStatus !== designStatus) {
-        setDesignStatus(site.designStatus);
-      }
-      if (site.approvalStatus && site.approvalStatus !== approvalStatus) {
-        setApprovalStatus(site.approvalStatus);
-      }
-      if (site.approvalFeedback && site.approvalFeedback !== approvalFeedback) {
-        setApprovalFeedback(site.approvalFeedback);
-      }
-      if (site.clientNotifications && JSON.stringify(site.clientNotifications) !== JSON.stringify(clientNotifications)) {
-        setClientNotifications(site.clientNotifications);
-      }
-    }
-  }, [site]);
-
   // Determine current stage index
   const getCurrentStageIndex = () => {
     if (approvalStatus === "Approved") return 4;
@@ -1411,7 +1354,6 @@ export default function DesignWorkspace({
     const newRev = {
       id: `rev-${Date.now()}`,
       date: dateStr,
-      createdDate: dateStr,
       requestedBy: "Client (Ankit)",
       category: revCategory,
       description: revDescription,
@@ -1436,6 +1378,7 @@ export default function DesignWorkspace({
     setRevDescription("");
   };
 
+  // Update a revision status
   const handleUpdateRevisionStatus = (id, newStatus) => {
     const today = new Date().toLocaleDateString("en-IN");
     const completedByUser = "Priya S. (Designer)";
@@ -1985,15 +1928,13 @@ export default function DesignWorkspace({
     let progress = 0;
     const interval = setInterval(async () => {
       progress += 20;
-      setReplacementProgress((p) => Math.min(p + 20, 100));
-    }, 100);
+      setReplacementProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
 
-    const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    try {
-      await storeFile(fileId, file);
-    } catch (e) {
-      console.error("Failed to store replacement file in IndexedDB:", e);
-    }
+        const fileUrl = URL.createObjectURL(file);
+        const dateStr = new Date().toLocaleDateString("en-IN");
+        const uploadedBy = site.supervisor || "Alex Sterling";
 
         if (replaceTarget.type === "default-design") {
           const targetFile = referenceFiles.find(
@@ -2021,15 +1962,14 @@ export default function DesignWorkspace({
                   changeNotes: notes,
                 };
                 return {
-                  ...att,
-                  id: fileId,
+                  ...f,
                   version: nextVer,
                   name: file.name,
                   type: extension,
                   url: fileUrl,
                   size: file.size,
                   uploadedDate: dateStr,
-                  versions: [...(att.versions || []), newVerObj],
+                  versions: [...(f.versions || []), newVerObj],
                 };
               }
               return f;
@@ -2084,6 +2024,7 @@ export default function DesignWorkspace({
                       uploadedDate: dateStr,
                       versions: [...(att.versions || []), newVerObj],
                     };
+                  }
                   return att;
                 });
                 return { ...r, attachedFiles: updatedAttachments };
@@ -2141,6 +2082,61 @@ export default function DesignWorkspace({
           );
           addNotification("New drawing version uploaded", "success");
         }
+
+        setReplacementUploading(false);
+        setReplaceTarget(null);
+        setTempReplacementFile(null);
+      }
+    }, 100);
+  };
+
+  // Helper to render user mentions in comment text
+  const renderCommentText = (text) => {
+    if (!text) return "";
+    const parts = text.split(/(@\w+(?:\s+\w+)?)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        return (
+          <span
+            key={i}
+            className="text-select-blue font-bold bg-blue-50 px-1 rounded"
+          >
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  // Drawing review submission handler
+  const handleReviewDrawingSubmit = (reviewer, comments, status) => {
+    if (!selectedDrawingForReview) return;
+    const dateStr = new Date().toLocaleDateString("en-IN");
+    setDrawings((prev) =>
+      prev.map((d) => {
+        if (d.id === selectedDrawingForReview.id) {
+          return {
+            ...d,
+            reviewer,
+            reviewComments: comments,
+            reviewDate: dateStr,
+            status: status,
+          };
+        }
+        return d;
+      }),
+    );
+    addActivity(
+      `Reviewed drawing "${selectedDrawingForReview.name}": Set status to ${status}`,
+      reviewer,
+    );
+    addNotification(
+      `Drawing marked as ${status}`,
+      status === "Approved" ? "success" : "warning",
+    );
+    setSelectedDrawingForReview(null);
+  };
 
   // Determine Current stage label
   const STAGES = [
@@ -2944,13 +2940,7 @@ export default function DesignWorkspace({
                                 </span>
                               </td>
                               <td className="p-3 text-gray-400 font-semibold">
-                                {rev.createdDate || rev.date || "—"}
-                              </td>
-                              <td className="p-3 text-gray-400 font-semibold">
-                                {rev.status === "Completed" ? (rev.completedDate || "—") : "—"}
-                              </td>
-                              <td className="p-3 text-gray-550 font-bold">
-                                {rev.status === "Completed" ? (rev.completedBy || "—") : "—"}
+                                {rev.date}
                               </td>
                               <td className="p-3 text-gray-400 font-semibold">
                                 {rev.completedDate || "—"}
@@ -4387,10 +4377,13 @@ export default function DesignWorkspace({
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => {
-                                const ext = (v.name || "").split(".").pop().toLowerCase();
-                                const isImageExt = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext);
-                                const isBlobUrl = v.url && v.url.startsWith("blob:");
-                                if (isImageExt || isBlobUrl) {
+                                const ext = v.name
+                                  .split(".")
+                                  .pop()
+                                  .toLowerCase();
+                                if (
+                                  ["png", "jpg", "jpeg", "webp"].includes(ext)
+                                ) {
                                   onExpandPhoto(
                                     [v.url],
                                     0,
