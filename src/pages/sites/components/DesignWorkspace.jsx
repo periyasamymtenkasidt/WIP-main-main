@@ -357,13 +357,17 @@ export default function DesignWorkspace({
       site.drawings.length > 0 &&
       site.drawings[0].versions
     ) {
-      return site.drawings;
+      return site.drawings.map(d => ({
+        ...d,
+        roomCategory: d.roomCategory || (d.name.toLowerCase().includes("kitchen") ? "Kitchen" : "Living Room")
+      }));
     }
     const baseDrawings = site.drawings || [
       {
         id: "dr-1",
         name: "Floor Plan Layout",
         category: "2D Drawings",
+        roomCategory: "Living Room",
         version: "V1",
         uploadedBy: "Rahul G.",
         uploadDate: "09.06.2026",
@@ -376,6 +380,7 @@ export default function DesignWorkspace({
         id: "dr-2",
         name: "Electrical Layout",
         category: "2D Drawings",
+        roomCategory: "Kitchen",
         version: "V2",
         uploadedBy: "Rahul G.",
         uploadDate: "10.06.2026",
@@ -388,6 +393,7 @@ export default function DesignWorkspace({
         id: "dr-3",
         name: "Living Room Render",
         category: "3D Drawings",
+        roomCategory: "Living Room",
         version: "V1",
         uploadedBy: "Priya S.",
         uploadDate: "10.06.2026",
@@ -400,6 +406,7 @@ export default function DesignWorkspace({
 
     return baseDrawings.map((d) => ({
       ...d,
+      roomCategory: d.roomCategory || (d.name.toLowerCase().includes("kitchen") ? "Kitchen" : "Living Room"),
       fileSize: d.fileSize || "1.5 MB",
       size: d.size || 1572864,
       reviewer: d.reviewer || "",
@@ -524,10 +531,7 @@ export default function DesignWorkspace({
 
   // Room checklist customization states
   const [draggedRoomName, setDraggedRoomName] = useState(null);
-  const [newRoomName, setNewRoomName] = useState("");
-  const [showAddRoom, setShowAddRoom] = useState(false);
-  const [editingRoomIdx, setEditingRoomIdx] = useState(null);
-  const [editingRoomName, setEditingRoomName] = useState("");
+
 
   // Drawing name options state
   const [drawingNameOptions, setDrawingNameOptions] = useState(() => {
@@ -570,6 +574,7 @@ export default function DesignWorkspace({
   const [revDescription, setRevDescription] = useState("");
   const [revPriority, setRevPriority] = useState("Medium");
   const [revAffectedRooms, setRevAffectedRooms] = useState("");
+  const [revRoomCategory, setRevRoomCategory] = useState("");
   const [newRevisionAttachments, setNewRevisionAttachments] = useState([]); // Array of files currently attached to new revision request
 
   // Revision Selection Modal state
@@ -582,6 +587,7 @@ export default function DesignWorkspace({
   const [drawCategory, setDrawCategory] = useState("2D Drawing");
   const [drawUploadedBy, setDrawUploadedBy] = useState("Priya S.");
   const [drawVisibleToClient, setDrawVisibleToClient] = useState(true);
+  const [drawRoomCategory, setDrawRoomCategory] = useState("");
 
   const [drawStatus, setDrawStatus] = useState("Draft");
   const [modalDrawingFile, setModalDrawingFile] = useState(null); // Uploaded file in Drawing upload modal
@@ -1348,6 +1354,10 @@ export default function DesignWorkspace({
   // Submit a new revision request
   const handleSubmitRevision = (e) => {
     e.preventDefault();
+    if (!revRoomCategory) {
+      addNotification("Please select a Room Category before submitting.", "error");
+      return;
+    }
     if (!revDescription.trim()) return;
 
     const dateStr = new Date().toLocaleDateString("en-IN");
@@ -1359,6 +1369,7 @@ export default function DesignWorkspace({
       description: revDescription,
       priority: revPriority,
       affectedRooms: revAffectedRooms,
+      roomCategory: revRoomCategory,
       notes: "Awaiting designer response.",
       resolutionNotes: "",
       status: "Pending",
@@ -1369,6 +1380,7 @@ export default function DesignWorkspace({
     setRevisions((prev) => [...prev, newRev]);
     setNewRevisionAttachments([]);
     setRevAffectedRooms("");
+    setRevRoomCategory("");
     setLastUpdatedRedesign(dateStr);
     addActivity(
       `New Revision Request submitted: ${revCategory} (${revPriority})`,
@@ -1761,7 +1773,18 @@ export default function DesignWorkspace({
   // Drawing Upload Handler (with Name duplicate check for versioning)
   const handleUploadDrawing = async (e) => {
     e.preventDefault();
-    if (!drawName.trim() || !modalDrawingFile) return;
+    if (!drawRoomCategory) {
+      addNotification("Please select a Room Category before uploading the design.", "error");
+      return;
+    }
+    if (!drawName.trim()) {
+      addNotification("Please select or enter a Drawing Name before uploading.", "error");
+      return;
+    }
+    if (!modalDrawingFile) {
+      addNotification("Please select a file to upload.", "error");
+      return;
+    }
 
     const dateStr = new Date().toLocaleDateString("en-IN");
     const existingDrawing = drawings.find(
@@ -1800,6 +1823,7 @@ export default function DesignWorkspace({
                 size: modalDrawingFile.size,
                 uploadDate: dateStr,
                 status: drawStatus,
+                roomCategory: drawRoomCategory,
                 visibleToClient: drawVisibleToClient,
                 versions: [...(d.versions || []), newVerObj],
               }
@@ -1822,6 +1846,7 @@ export default function DesignWorkspace({
         id: newDrawId,
         name: drawName,
         category: drawCategory === "2D Drawing" ? "2D Drawings" : "3D Drawings",
+        roomCategory: drawRoomCategory,
         version: "V1",
         uploadedBy: drawUploadedBy || "Priya S.",
         uploadDate: dateStr,
@@ -1852,6 +1877,7 @@ export default function DesignWorkspace({
     }
 
     setDrawName("");
+    setDrawRoomCategory("");
     setModalDrawingFile(null);
     setShowUploadModal(false);
     setShowAddNewDrawNamePopover(false);
@@ -2908,6 +2934,7 @@ export default function DesignWorkspace({
                           <tr className="bg-palewhite border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
                             <th className="p-3">Revision</th>
                             <th className="p-3">Requested By</th>
+                            <th className="p-3">Room Category</th>
                             <th className="p-3">Affected Rooms</th>
                             <th className="p-3">Priority</th>
                             <th className="p-3">Created Date</th>
@@ -2928,6 +2955,9 @@ export default function DesignWorkspace({
                               </td>
                               <td className="p-3 font-semibold text-gray-500">
                                 {rev.requestedBy}
+                              </td>
+                              <td className="p-3 font-semibold text-purple font-bold">
+                                {rev.roomCategory || "All"}
                               </td>
                               <td className="p-3 font-semibold text-gray-500">
                                 {rev.affectedRooms || "All Rooms"}
@@ -3018,6 +3048,18 @@ export default function DesignWorkspace({
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="flex flex-col md:col-span-2">
+                      <label className="block text-[11px] font-semibold text-darkgray mb-1">
+                        Room Category <span className="text-red-500">*</span>
+                      </label>
+                      <SearchableSelect
+                        value={revRoomCategory}
+                        onChange={(val) => setRevRoomCategory(val)}
+                        options={getRoomCategories()}
+                        placeholder="Select Room Category..."
+                        className="w-full text-xs bg-light-gray border border-bordergray rounded-lg px-3 py-2.5 focus:outline-none focus:border-gray-300 cursor-pointer font-semibold"
+                      />
                     </div>
                     <div className="flex flex-col md:col-span-2">
                       <label className="mb-1 text-[11px] font-semibold text-darkgray">
@@ -3238,6 +3280,7 @@ export default function DesignWorkspace({
                         <tr className="bg-palewhite border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider text-[10px]">
                           <th className="p-3">Drawing Name</th>
                           <th className="p-3">Category</th>
+                          <th className="p-3">Room Category</th>
                           <th className="p-3">Version</th>
                           <th className="p-3">Reviewer & Date</th>
                           <th className="p-3">Status</th>
@@ -3273,6 +3316,9 @@ export default function DesignWorkspace({
                                 {draw.category === "2D Drawings"
                                   ? "2D Drawing"
                                   : "3D Drawing"}
+                              </td>
+                              <td className="p-3 font-semibold text-gray-700">
+                                {draw.roomCategory || "Living Room"}
                               </td>
                               <td className="p-3 font-bold">
                                 <span className="bg-gray-100 px-2 py-0.5 rounded text-[10px] text-gray-700">
@@ -4071,6 +4117,7 @@ export default function DesignWorkspace({
                 setShowUploadModal(false);
                 setModalDrawingFile(null);
                 setDrawName("");
+                setDrawRoomCategory("");
                 setShowAddNewDrawNamePopover(false);
                 setNewCustomDrawName("");
                 setCustomDrawNameError("");
@@ -4085,6 +4132,19 @@ export default function DesignWorkspace({
             </h3>
 
             <form onSubmit={handleUploadDrawing} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-darkgray mb-1">
+                  Room Category <span className="text-red-500">*</span>
+                </label>
+                <SearchableSelect
+                  value={drawRoomCategory}
+                  onChange={(val) => setDrawRoomCategory(val)}
+                  options={getRoomCategories()}
+                  placeholder="Select Room Category..."
+                  className="w-full text-xs bg-light-gray border border-bordergray rounded-lg px-3 py-2.5 focus:outline-none focus:border-gray-300 cursor-pointer font-semibold mb-3"
+                />
+              </div>
+
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-darkgray">
@@ -4599,13 +4659,21 @@ export default function DesignWorkspace({
             </p>
 
             <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block">
                     Reason / Category
                   </span>
                   <span className="font-semibold text-darkgray">
                     {selectedRevisionForDetails.category}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider block">
+                    Room Category
+                  </span>
+                  <span className="font-semibold text-purple font-bold">
+                    {selectedRevisionForDetails.roomCategory || "All"}
                   </span>
                 </div>
                 <div>

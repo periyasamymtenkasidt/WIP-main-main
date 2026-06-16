@@ -523,6 +523,8 @@ const LeadEdit = () => {
       joinDate,
       sourceLeadId: lead.proposalId,
       projectValue: numericValue,
+      quotePreset: formData.quotePreset || lead.quotePreset,
+      propertyType: formData.propertyType || formData.location || lead.propertyType,
     };
     localStorage.setItem(
       "newClientsData",

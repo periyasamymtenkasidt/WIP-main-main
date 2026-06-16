@@ -202,11 +202,12 @@ const ClientProfile = () => {
       newClients[existingIndex] = {
         ...newClients[existingIndex],
         ...updatedData,
+        propertyType: updatedData.location,
       };
       localStorage.setItem("newClientsData", JSON.stringify(newClients));
       setClient({ ...newClients[existingIndex] });
     } else {
-      const updatedClient = { ...client, ...updatedData };
+      const updatedClient = { ...client, ...updatedData, propertyType: updatedData.location };
       newClients.push(updatedClient);
       localStorage.setItem("newClientsData", JSON.stringify(newClients));
       setClient(updatedClient);

@@ -3,27 +3,25 @@ import { useNavigate, useParams, NavLink, Outlet, useLocation } from "react-rout
 import { FaWhatsapp } from "react-icons/fa6";
 import { RiMoneyRupeeCircleFill } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
+import { MdOutlineDashboard, MdOutlineReceiptLong, MdOutlineContactSupport } from "react-icons/md";
+import { PiUsersThreeBold, PiSignOut } from "react-icons/pi";
+import { LuMapPin } from "react-icons/lu";
+import { IoMdNotificationsOutline } from "react-icons/io";
 import {
   Mail,
   Loader2,
-  ArrowLeft,
-  Home,
-  Calendar,
-  MessageCircleMore,
-  LogOut,
   Phone,
   FileText,
   Activity,
   MapPin,
-  Image as ImageIcon,
-  Bell
+  Image as ImageIcon
 } from "lucide-react";
-import { getClient, getAllClients } from "../data/clientStorage";
-import { getActiveClientId, clientLogout } from "../auth/clientAuth";
-import { PAYMENT_MILESTONES } from "../data/MilestoneConfig";
-import { getAllSites, saveSite } from "../data/siteStorage";
-import wipLogo from "../assets/images/Logo.png";
-import ClientAvatar from "../assets/images/Client_avatar.png";
+import { getClient, getAllClients } from "../../data/clientStorage";
+import { getActiveClientId, clientLogout } from "../../auth/clientAuth";
+import { PAYMENT_MILESTONES } from "../../data/MilestoneConfig";
+import { getAllSites, saveSite } from "../../data/siteStorage";
+import wipLogo from "../../assets/images/Logo.png";
+import ClientAvatar from "../../assets/images/Client_avatar.png";
 
 const parseBudget = (budgetString) => {
   if (!budgetString) return 5000000;
@@ -55,14 +53,15 @@ const ClientPortalLayout = () => {
 
   const getDynamicTitle = () => {
     const path = location.pathname;
-    if (path.endsWith("/dashboard")) return "Client Dashboard";
-    if (path.endsWith("/designs-renders")) return "Designs & Renders";
-    if (path.endsWith("/quotes")) return "Project Estimates & Quotes";
-    if (path.endsWith("/calendar")) return "Site Visits & Calendar";
-    if (path.endsWith("/milestones")) return "Payment Milestones";
-    if (path.endsWith("/invoice")) return "GST Invoices";
-    if (path.endsWith("/chat")) return "Support & Chat";
-    return "Client Profile";
+    if (path.endsWith("/dashboard")) return "Dashboard";
+    if (path.endsWith("/designs-renders")) return "Designs and Renders";
+    if (path.endsWith("/project-quotes")) return "Project Quotes";
+    if (path.endsWith("/site-visits-calendar")) return "Site Visit and Calendar";
+    if (path.endsWith("/payment-milestones")) return "Payment Milestones";
+    if (path.endsWith("/gst-invoice")) return "Invoice";
+    if (path.endsWith("/support-chat")) return "Support";
+    if (path.endsWith("/profile")) return "Profile";
+    return "Client";
   };
   const [clientId, setClientId] = useState(routeClientId || getActiveClientId());
   const [client, setClient] = useState(null);
@@ -72,6 +71,7 @@ const ClientPortalLayout = () => {
   const [site, setSite] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   useEffect(() => {
     if (client) {
@@ -594,298 +594,296 @@ const ClientPortalLayout = () => {
 
   // Define client sidebar module menus
   const clientModules = [
-    { id: "dashboard", label: "Dashboard", icon: Home, path: "dashboard" },
+    { id: "dashboard", label: "Dashboard", icon: MdOutlineDashboard, path: "dashboard" },
     { id: "milestones", label: "Payment Milestones", icon: RiMoneyRupeeCircleFill, path: "payment-milestones" },
-    { id: "quotes", label: "Project Quotes", icon: FaRegFilePdf, path: "project-quotes" },
-    { id: "appointments", label: "Site Visits & Calendar", icon: Calendar, path: "site-visits-calendar" },
-    { id: "gallery", label: "Designs & Renders", icon: ImageIcon, path: "designs-renders" },
-    { id: "support", label: "Support & Chat", icon: MessageCircleMore, path: "support-chat" },
-    { id: "invoices", label: "GST Invoice", icon: FileText, path: "gst-invoice" },
+    { id: "quotes", label: "Project Quotes", icon: MdOutlineReceiptLong, path: "project-quotes" },
+    { id: "appointments", label: "Site Visit and Calendar", icon: LuMapPin, path: "site-visits-calendar" },
+    { id: "gallery", label: "Designs and Renders", icon: ImageIcon, path: "designs-renders" },
+    { id: "invoices", label: "Invoice", icon: FileText, path: "gst-invoice" },
+    { id: "profile", label: "Profile", icon: PiUsersThreeBold, path: "profile" },
   ];
 
+  const supportModules = [
+    { id: "support", label: "Support", icon: MdOutlineContactSupport, path: "support-chat" },
+    { id: "signout", label: "Sign Out", icon: PiSignOut, onClick: handleLogout },
+  ];
+
+  const renderItem = (item) => {
+    const Icon = item.icon;
+    const isButton = !!item.onClick;
+
+    const classStr = (isActive) =>
+      `flex flex-col md:flex-row items-center gap-1 md:gap-3 px-2 md:px-3 py-2 rounded-lg mb-1 md:mb-2 transition-colors cursor-pointer w-full text-left ${
+        isActive
+          ? "bg-active-bg text-select-blue md:border-r-4 md:border-select-blue font-semibold"
+          : "text-grey hover:bg-active-bg hover:text-darkgray"
+      }`;
+
+    if (isButton) {
+      return (
+        <button
+          key={item.id}
+          onClick={item.onClick}
+          className={classStr(false)}
+          title={item.label}
+        >
+          <Icon size={20} className="shrink-0" />
+          <span className="text-[9px] leading-tight text-center md:text-sm md:leading-normal md:text-left whitespace-nowrap">
+            {item.label}
+          </span>
+        </button>
+      );
+    }
+
+    return (
+      <NavLink
+        key={item.id}
+        to={`/client-portal/${clientId}/${item.path}`}
+        className={({ isActive }) => classStr(isActive)}
+        title={item.label}
+      >
+        <Icon size={20} className="shrink-0" />
+        <span className="text-[9px] leading-tight text-center md:text-sm md:leading-normal md:text-left whitespace-nowrap">
+          {item.label}
+        </span>
+      </NavLink>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-overallbg text-textcolor flex w-full font-sans overflow-hidden h-screen">
-      
-      {/* Left Sidebar Module Bar */}
-      <aside className="w-20 md:w-64 bg-white border-r border-bordergray flex flex-col justify-between shrink-0 h-full p-4 z-40 shadow-sm">
-        <div className="flex flex-col gap-2">
-          {/* Logo */}
-          <div className="mb-6 hidden md:flex items-center gap-3 px-2">
-            <img src={wipLogo} alt="WIP Logo" className="h-8 w-auto object-contain" />
-            <div className="flex flex-col border-l border-paleorange/40 pl-3 leading-none">
-              <p className="text-[10px] uppercase tracking-[0.3em] text-dark-yellow font-bold">
-                Client Portal
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-overallbg font-manrope">
+      {/* Top Header */}
+      <header className="shrink-0 sticky top-0 z-50">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center bg-surface mx-4 my-2 rounded-lg shadow-xs">
+          <div className="wip-glass relative overflow-hidden rounded-xl px-4 py-2 flex gap-3.5 items-center transition-transform duration-300 hover:scale-[1.02]">
+            {/* Animated shimmer sweep */}
+            <span
+              aria-hidden="true"
+              className="wip-shimmer pointer-events-none absolute inset-y-0 left-0 w-2/3 -skew-x-12"
+            />
+            <img
+              src={wipLogo}
+              alt="WIP"
+              className="relative h-13 w-auto object-contain shrink-0"
+              style={{
+                height: "52px",
+                filter:
+                  "contrast(1.25) saturate(1.15) drop-shadow(0 1px 1.5px rgba(139, 105, 20, 0.18))",
+              }}
+            />
+            <div className="relative hidden sm:flex flex-col leading-none border-l border-paleorange/50 pl-3 py-1">
+              <p className="text-[9px] uppercase tracking-[0.45em] text-dark-yellow font-bold leading-none">
+                Architecture
+              </p>
+              <p className="text-[9px] uppercase tracking-[0.45em] text-dark-yellow font-bold mt-1.5 leading-none">
+                Interiors
+              </p>
+              <p className="text-[7px] uppercase tracking-[0.35em] text-text-subtle mt-2 leading-none">
+                Chennai
               </p>
             </div>
           </div>
 
-          {/* Module list */}
-          {clientModules.map((m) => {
-            const Icon = m.icon;
-            return (
-              <NavLink
-                key={m.id}
-                to={`/client-portal/${clientId}/${m.path}`}
-                className={({ isActive }) =>
-                  `flex flex-col font-semibold md:flex-row items-center gap-1 md:gap-3 px-3 py-3 rounded-xl transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-active-bg text-select-blue md:border-r-4 md:border-select-blue font-bold shadow-sm"
-                      : "text-grey hover:bg-active-bg hover:text-darkgray"
-                  }`
-                }
-              >
-                <Icon size={20} />
-                <span className="text-[9px] md:text-[13.5px] leading-tight text-center md:text-left whitespace-nowrap">
-                  {m.label}
-                </span>
-              </NavLink>
-            );
-          })}
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="border-t border-bordergray/60 pt-4 flex flex-col gap-3">
-          <div className="flex items-center gap-3 px-2">
-            <img src={ClientAvatar} alt="Client" className="w-8 h-8 rounded-full object-cover border border-bordergray" />
-            <div className="hidden md:block text-left leading-none">
-              <p className="text-xs font-bold text-darkgray truncate w-32">{client.clientName}</p>
-              <p className="text-[10px] text-text-subtle mt-0.5">{client.clientID}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center justify-center md:justify-start gap-3 w-full px-3 py-2.5 rounded-xl border border-bordergray text-grey hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all cursor-pointer shadow-sm"
-            title="Log Out"
-          >
-            <LogOut size={16} />
-            <span className="hidden md:inline text-xs font-bold">Log Out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        
-        {/* Title bar */}
-        <div className="px-6 sm:px-10 pt-6 flex justify-between items-center shrink-0 relative">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-bordergray hover:bg-gray-50 text-gray-500 transition-all shadow-sm cursor-pointer animate-all"
-              title="Go back"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <h1 className="text-[26px] font-bold text-darkgray leading-tight">
-                {getDynamicTitle()}
-              </h1>
-              <p className="text-[13px] text-gray-500 mt-1">
-                Clients — {client.clientName}
-              </p>
-            </div>
-          </div>
-
-          {/* Notifications Bell Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-bordergray hover:bg-gray-50 text-gray-500 transition-all shadow-sm cursor-pointer relative"
-              title="Notifications"
-            >
-              <Bell size={18} />
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Notification Bell Dropdown */}
+            <div className="relative">
+              <IoMdNotificationsOutline
+                size={30}
+                className="bg-bg-soft rounded-full p-1 text-textcolor cursor-pointer"
+                onClick={() => setShowNotifications(!showNotifications)}
+              />
               {notifications.some((n) => !n.read) && (
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
               )}
-            </button>
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white border border-bordergray rounded-2xl shadow-xl z-50 p-4 text-left max-h-96 overflow-y-auto">
-                <div className="flex justify-between items-center pb-2 border-b border-gray-100 mb-3">
-                  <h4 className="text-xs font-bold text-darkgray uppercase tracking-wider">Notifications</h4>
-                  {notifications.some((n) => !n.read) && (
-                    <button
-                      onClick={() => markAllNotificationsAsRead()}
-                      className="text-[10px] font-bold text-purple hover:underline"
-                    >
-                      Mark all read
-                    </button>
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white border border-bordergray rounded-2xl shadow-xl z-50 p-4 text-left max-h-96 overflow-y-auto">
+                  <div className="flex justify-between items-center pb-2 border-b border-gray-100 mb-3">
+                    <h4 className="text-xs font-bold text-darkgray uppercase tracking-wider">Notifications</h4>
+                    {notifications.some((n) => !n.read) && (
+                      <button
+                        onClick={() => markAllNotificationsAsRead()}
+                        className="text-[10px] font-bold text-purple hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-4">No notifications yet</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {notifications.map((n) => (
+                        <div key={n.id} className={`flex gap-3 p-2 rounded-xl transition-colors hover:bg-slate-50 ${!n.read ? "bg-blue-50/30" : ""}`}>
+                          <div className="mt-0.5 shrink-0">
+                            {n.type === "success" && <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5" />}
+                            {n.type === "upload" && <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5" />}
+                            {n.type === "approval" && <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5" />}
+                            {n.type === "info" && <div className="w-2 h-2 rounded-full bg-slate-400 mt-1.5" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-darkgray truncate">{n.title}</p>
+                            <p className="text-[11px] text-gray-500 leading-snug mt-0.5 whitespace-pre-wrap">{n.text}</p>
+                            <p className="text-[9px] text-gray-400 mt-1 font-semibold">{n.timestamp}</p>
+                          </div>
+                          {!n.read && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-2 self-start shrink-0" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {notifications.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-4">No notifications yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {notifications.map((n) => (
-                      <div key={n.id} className={`flex gap-3 p-2 rounded-xl transition-colors hover:bg-slate-50 ${!n.read ? "bg-blue-50/30" : ""}`}>
-                        <div className="mt-0.5 shrink-0">
-                          {n.type === "success" && <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5" />}
-                          {n.type === "upload" && <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5" />}
-                          {n.type === "approval" && <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5" />}
-                          {n.type === "info" && <div className="w-2 h-2 rounded-full bg-slate-400 mt-1.5" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-darkgray truncate">{n.title}</p>
-                          <p className="text-[11px] text-gray-500 leading-snug mt-0.5 whitespace-pre-wrap">{n.text}</p>
-                          <p className="text-[9px] text-gray-400 mt-1 font-semibold">{n.timestamp}</p>
-                        </div>
-                        {!n.read && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-2 self-start shrink-0" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
+
+            <div className="border-l border-border h-7.5" />
+
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-semibold text-textcolor">{client.clientName}</p>
+              <p className="text-xs text-text-muted">Client ID: {client.clientID}</p>
+            </div>
+
+            {/* Profile Dropdown */}
+            <div className="relative">
+              <img
+                src={ClientAvatar}
+                alt="Client Avatar"
+                className="h-9 w-9 sm:h-10 sm:w-10 cursor-pointer rounded-full object-cover"
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+              />
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-bordergray rounded-xl shadow-lg py-1 z-50 animate-fade-in text-left">
+                  <NavLink
+                    to={`/client-portal/${clientId}/profile`}
+                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-bg-soft font-semibold"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
+                    View Profile
+                  </NavLink>
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      handleLogout();
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2 cursor-pointer font-semibold"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      </header>
 
-        {/* Scrollable Body */}
-        <div className="flex-1 p-6 sm:p-10 flex flex-col lg:flex-row gap-6 overflow-y-auto">
-          
-          {/* Left Column - Sidebar Info */}
-          {location.pathname.endsWith("/dashboard") && (
-            <div className="w-full lg:w-1/3 flex flex-col gap-6 min-w-0 shrink-0">
-              {/* Profile Card */}
-              <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] flex flex-col items-center text-center">
-                <div className="relative mb-5">
-                  <img
-                    src={ClientAvatar}
-                    alt=""
-                    className="w-28 h-28 rounded-full border-[3px] border-white shadow-md object-cover"
-                  />
-                  <div className="absolute bottom-2 right-2 w-4 h-4 bg-emerald-500 border-[3px] border-white rounded-full" />
-                </div>
+      <div className="flex-1 w-full flex overflow-hidden">
+        {/* Left Sidebar Module Bar */}
+        <aside className="shrink-0 h-full overflow-y-auto scroll-hidden-bar">
+          <div className="flex flex-col justify-between min-h-full p-3 md:p-4 w-20 md:w-64">
+            <div>
+              {clientModules.map(renderItem)}
+            </div>
+            <div>
+              {supportModules.map(renderItem)}
+            </div>
+          </div>
+        </aside>
 
-                <h3 className="text-[22px] font-bold text-dark-blue mb-1">
-                  {client.clientName}
-                </h3>
-                <p className="text-[12px] font-medium text-gray-400 mb-2">
-                  {client.clientID}
+        {/* Main Content Area */}
+        <main className="flex-1 h-full overflow-hidden flex flex-col">
+          {/* Title bar */}
+          <div className="px-6 sm:px-10 pt-4 pb-2 flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-[26px] font-bold text-darkgray leading-tight">
+                  {getDynamicTitle()}
+                </h1>
+                <p className="text-[13px] text-gray-500 mt-1">
+                  Clients — {client.clientName}
                 </p>
-
-                <span
-                  className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(client.paymentStatus || "pending")}`}
-                >
-                  {client.paymentStatus || "PENDING"}
-                </span>
-
-                {isConverted && (
-                  <span className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-teal-600">
-                    Converted from Lead #{client.sourceLeadId}
-                  </span>
-                )}
-
-                {client.joinDate && (
-                  <p className="mt-2 text-[11px] text-text-muted">
-                    Client since {client.joinDate}
-                  </p>
-                )}
               </div>
-
-              {/* Profile Info Details Grid */}
-              <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] p-6 text-left">
-                <h4 className="text-[13px] font-bold text-darkgray uppercase tracking-wider border-b border-gray-100 pb-3 mb-4">
-                  Profile Details
-                </h4>
-                <div className="space-y-4">
-                  {[
-                    { label: "Phone Number", value: client.phone || "—", icon: Phone },
-                    { label: "Email", value: client.email || "—", icon: Mail },
-                    { label: "Property Preset", value: client.quotePreset || "—" },
-                    { label: "Property Type", value: client.propertyType || "Apartment" },
-                    { label: "Location", value: client.location || "—", icon: MapPin },
-                    { label: "Budget", value: client.budget || "—", icon: RiMoneyRupeeCircleFill },
-                  ].map(({ label, value, icon: Icon }, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-xs">
-                      <span className="text-gray-400 font-medium flex items-center gap-1.5">
-                        {Icon && <Icon size={12} />}
-                        {label}
-                      </span>
-                      <p className="font-bold text-darkgray text-right truncate pl-4 max-w-[160px]">
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Right Column - Stats and Sub-Module View */}
-          <div className={`${location.pathname.endsWith("/dashboard") ? "w-full lg:w-2/3" : "w-full"} flex flex-col gap-6 min-w-0`}>
-            {/* Stats Metric Cards */}
-            {location.pathname.endsWith("/dashboard") && (
-              <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] p-6 shrink-0 text-left">
-                <h3 className="flex items-center gap-2 text-[15px] font-bold text-darkgray border-b border-gray-100 pb-3 mb-4">
-                  <Activity size={16} className="text-gray-500" /> Activity Summary
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100/50">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Total Stages</p>
-                    <div className="text-[18px] font-extrabold text-slate-800">{milestones.length}</div>
-                  </div>
-                  <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Stages Completed</p>
-                    <div className="text-[18px] font-extrabold text-emerald-700">{paidCount}</div>
-                  </div>
-                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Stages Pending</p>
-                    <div className="text-[18px] font-extrabold text-amber-700">{pendingCount}</div>
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100/50">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Total Project Value</p>
-                    <div className="text-[18px] font-extrabold text-select-blue font-sans">
-                      {formatAmount(totalContract)}
-                    </div>
-                  </div>
-                  <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Amount Paid</p>
-                    <div className="text-[18px] font-extrabold text-emerald-700 font-sans">{formatAmount(totalCollected)}</div>
-                  </div>
-                  <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Balance Amount</p>
-                    <div className="text-[18px] font-extrabold text-rose-700 font-sans">
-                      {formatAmount(remainingCollected)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Sub-module View Wrapper Card */}
-            <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] flex flex-col flex-1">
-              <Outlet context={{
-                client,
-                site,
-                updateSite,
-                notifications,
-                addClientNotification,
-                markAllNotificationsAsRead,
-                milestones,
-                setMilestones,
-                appointments,
-                setAppointments,
-                messages,
-                setMessages,
-                gallery,
-                setGallery,
-                totalContract,
-                totalCollected,
-                remainingCollected,
-                progressPct,
-                paidCount,
-                pendingCount,
-                associatedLead,
-                handleCreateAppointment,
-                handleSendMessage,
-                formatAmount,
-                parseBudget,
-                getStatusStyle
-              }} />
             </div>
           </div>
-        </div>
+
+          {/* Scrollable Body */}
+          <div className="flex-1 p-6 sm:p-10 flex flex-col lg:flex-row gap-6 overflow-y-auto">
+            {/* The Left Column (Client Information) is REMOVED from the Dashboard as requested, since details are only displayed in the Client Profile page! */}
+
+            {/* Right Column - Stats and Sub-Module View */}
+            <div className={`${location.pathname.endsWith("/dashboard") ? "w-full lg:w-full" : "w-full"} flex flex-col gap-6 min-w-0 flex-1`}>
+              {/* Stats Metric Cards */}
+              {location.pathname.endsWith("/dashboard") && (
+                <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] p-6 shrink-0 text-left">
+                  <h3 className="flex items-center gap-2 text-[15px] font-bold text-darkgray border-b border-gray-100 pb-3 mb-4">
+                    <Activity size={16} className="text-gray-500" /> Activity Summary
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100/50">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Total Stages</p>
+                      <div className="text-[18px] font-extrabold text-slate-800">{milestones.length}</div>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Stages Completed</p>
+                      <div className="text-[18px] font-extrabold text-emerald-700">{paidCount}</div>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Stages Pending</p>
+                      <div className="text-[18px] font-extrabold text-amber-700">{pendingCount}</div>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100/50">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Total Project Value</p>
+                      <div className="text-[18px] font-extrabold text-select-blue font-sans">
+                        {formatAmount(totalContract)}
+                      </div>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Amount Paid</p>
+                      <div className="text-[18px] font-extrabold text-emerald-700 font-sans">{formatAmount(totalCollected)}</div>
+                    </div>
+                    <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
+                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Balance Amount</p>
+                      <div className="text-[18px] font-extrabold text-rose-700 font-sans">
+                        {formatAmount(remainingCollected)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-module View Wrapper Card */}
+              <div className="bg-white rounded-[20px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] flex flex-col flex-1">
+                <Outlet context={{
+                  client,
+                  site,
+                  updateSite,
+                  notifications,
+                  addClientNotification,
+                  markAllNotificationsAsRead,
+                  milestones,
+                  setMilestones,
+                  appointments,
+                  setAppointments,
+                  messages,
+                  setMessages,
+                  gallery,
+                  setGallery,
+                  totalContract,
+                  totalCollected,
+                  remainingCollected,
+                  progressPct,
+                  paidCount,
+                  pendingCount,
+                  associatedLead,
+                  handleCreateAppointment,
+                  handleSendMessage,
+                  formatAmount,
+                  parseBudget,
+                  getStatusStyle
+                }} />
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );

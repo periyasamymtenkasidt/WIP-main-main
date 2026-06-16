@@ -169,7 +169,7 @@ const Login = () => {
               />
               <div className="flex flex-col leading-none border-l border-paleorange/40 pl-3">
                 <p className="text-[9px] uppercase tracking-[0.4em] text-dark-yellow font-bold leading-none">
-                  {loginType === "admin" ? "Architecture" : "Client Portal"}
+                  Architecture
                 </p>
                 <p className="text-[9px] uppercase tracking-[0.4em] text-text-subtle font-semibold mt-1.5 leading-none">
                   Interiors · Chennai

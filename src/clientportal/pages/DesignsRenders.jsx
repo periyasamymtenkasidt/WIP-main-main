@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getFile, storeFile } from "../../../utils/fileStorage";
+import { getFile, storeFile } from "../../utils/fileStorage";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { 
   CheckCircle2, 
@@ -18,6 +18,7 @@ import {
   FileText,
   Bookmark
 } from "lucide-react";
+import { getRoomCategories } from "../../data/scheduleConfig";
 
 const DesignsRenders = () => {
   const navigate = useNavigate();
@@ -167,6 +168,7 @@ const DesignsRenders = () => {
   };
 
   const [activeTab, setActiveTab] = useState("all"); // all, 2d, 3d, approved
+  const [selectedRoomCategory, setSelectedRoomCategory] = useState("All");
   
   // Modal states
   const [selectedDrawing, setSelectedDrawing] = useState(null); // Lightbox
@@ -280,18 +282,39 @@ const DesignsRenders = () => {
 
   // Filter drawings visible to client
   const visibleDrawings = drawings.filter(d => d.visibleToClient !== false);
-
-  // Filtered lists for tabs
   const drawings2D = visibleDrawings.filter(d => d.category === "2D Drawings");
-  const drawings3D = visibleDrawings.filter(d => d.category === "3D Drawings");
-  const approvedDrawings = visibleDrawings.filter(d => d.status === "Approved");
+
+  // Helper to get room category for drawing
+  const getDrawingRoomCategory = (d) => {
+    if (d.roomCategory) return d.roomCategory;
+    if (d.name.toLowerCase().includes("kitchen")) return "Kitchen";
+    return "Living Room";
+  };
+
+  // Get all room categories from site config plus any custom ones from drawings
+  const roomCategories = getRoomCategories();
+  const uniqueDrawingCategories = Array.from(new Set(visibleDrawings.map(getDrawingRoomCategory)));
+  const allCategories = Array.from(new Set([...roomCategories, ...uniqueDrawingCategories]));
+
+  // Calculate counts for each category
+  const categoryCounts = {};
+  allCategories.forEach(cat => {
+    categoryCounts[cat] = visibleDrawings.filter(d => getDrawingRoomCategory(d).toLowerCase() === cat.toLowerCase()).length;
+  });
+
+  // Filter categories with > 0 files
+  const nonZeroCategories = allCategories.filter(cat => (categoryCounts[cat] || 0) > 0);
 
   const getFilteredDrawings = () => {
+    const filteredByRoom = selectedRoomCategory === "All"
+      ? visibleDrawings
+      : visibleDrawings.filter(d => getDrawingRoomCategory(d).toLowerCase() === selectedRoomCategory.toLowerCase());
+
     switch (activeTab) {
-      case "2d": return drawings2D;
-      case "3d": return drawings3D;
-      case "approved": return approvedDrawings;
-      default: return visibleDrawings;
+      case "2d": return filteredByRoom.filter(d => d.category === "2D Drawings");
+      case "3d": return filteredByRoom.filter(d => d.category === "3D Drawings");
+      case "approved": return filteredByRoom.filter(d => d.status === "Approved");
+      default: return filteredByRoom;
     }
   };
 
@@ -404,6 +427,7 @@ const DesignsRenders = () => {
     }
 
     if (feedbackStatus === "Changes") {
+      const targetRoomCategory = selectedDrawingForFeedback.roomCategory || (selectedDrawingForFeedback.name.toLowerCase().includes("kitchen") ? "Kitchen" : "Living Room");
       if (isPaid) {
         queuePaidRevisionPayment(nextRevNum, {
           id: `rev-${Date.now()}`,
@@ -415,7 +439,8 @@ const DesignsRenders = () => {
           category: "Drawing Feedback",
           affectedRooms: selectedDrawingForFeedback.name,
           attachedFiles: [],
-          drawingId: selectedDrawingForFeedback.id
+          drawingId: selectedDrawingForFeedback.id,
+          roomCategory: targetRoomCategory
         });
         setSelectedDrawingForFeedback(null);
         return;
@@ -431,7 +456,8 @@ const DesignsRenders = () => {
         status: "Pending",
         category: "Drawing Feedback",
         affectedRooms: selectedDrawingForFeedback.name,
-        attachedFiles: []
+        attachedFiles: [],
+        roomCategory: targetRoomCategory
       };
 
       const systemComment = {
@@ -608,7 +634,8 @@ const DesignsRenders = () => {
         status: "Pending",
         category: "Package Feedback",
         affectedRooms: "Entire Package",
-        attachedFiles: []
+        attachedFiles: [],
+        roomCategory: "All"
       });
       setShowApprovalChangeModal(false);
       setApprovalChangeText("");
@@ -622,7 +649,8 @@ const DesignsRenders = () => {
         status: "Pending",
         category: "Package Feedback",
         affectedRooms: "Entire Package",
-        attachedFiles: []
+        attachedFiles: [],
+        roomCategory: "All"
       };
 
       const systemComment = {
@@ -920,6 +948,36 @@ const DesignsRenders = () => {
       {/* Main Tabbed Grid deliverables & reviews */}
       <div className="flex-1 min-h-0 flex flex-col space-y-4">
         
+        {/* Room Category Filter Chips */}
+        <div className="flex flex-col space-y-2 shrink-0 text-left">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter by Room Category</span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedRoomCategory("All")}
+              className={`px-4 py-2 rounded-full text-xs font-extrabold transition-all duration-200 cursor-pointer shadow-sm border ${
+                selectedRoomCategory === "All"
+                  ? "bg-purple border-purple text-white hover:bg-purple-700"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+              }`}
+            >
+              All ({visibleDrawings.length})
+            </button>
+            {nonZeroCategories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedRoomCategory(cat)}
+                className={`px-4 py-2 rounded-full text-xs font-extrabold transition-all duration-200 cursor-pointer shadow-sm border ${
+                  selectedRoomCategory.toLowerCase() === cat.toLowerCase()
+                    ? "bg-purple border-purple text-white hover:bg-purple-700"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                }`}
+              >
+                {cat} ({categoryCounts[cat] || 0})
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Navigation categories */}
         <div className="flex justify-between items-center border-b border-gray-150 pb-2 shrink-0 flex-wrap gap-2">
           <div className="flex gap-1.5">
@@ -957,8 +1015,8 @@ const DesignsRenders = () => {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {getFilteredDrawings().map((d) => {
-                const is3D = d.category === "3D Drawings";
                 const drawingUrl = localUrls[d.id] || d.fileUrl;
+                const roomCat = getDrawingRoomCategory(d);
                 return (
                   <div 
                     key={d.id} 
@@ -973,9 +1031,12 @@ const DesignsRenders = () => {
                       />
                       
                       {/* Top labels */}
-                      <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                      <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5">
                         <span className="px-2 py-0.5 text-[9px] uppercase font-extrabold bg-slate-950/80 text-white rounded-md tracking-wider">
                           {d.category === "3D Drawings" ? "3D Render" : "2D CAD"}
+                        </span>
+                        <span className="px-2 py-0.5 text-[9px] uppercase font-extrabold bg-purple text-white rounded-md tracking-wider">
+                          {roomCat}
                         </span>
                       </div>
 

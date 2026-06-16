@@ -97,6 +97,8 @@ const Client = () => {
       budget: newClientData.budget,
       paymentStatus: newClientData.paymentStatus,
       joinDate,
+      quotePreset: "2BHK",
+      propertyType: newClientData.location,
     };
     const updated = [newClient, ...newClients];
     setNewClients(updated);
