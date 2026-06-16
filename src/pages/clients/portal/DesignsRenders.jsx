@@ -1085,11 +1085,7 @@ const DesignsRenders = () => {
               <p className="text-[11px] font-semibold text-gray-400">No revisions logged for this design yet.</p>
             </div>
           ) : (
-<<<<<<< HEAD
             <div className="overflow-x-auto border border-slate-100 rounded-xl">
-=======
-            <div className="max-h-[300px] overflow-y-auto overflow-x-auto border border-slate-100 rounded-xl custom-scrollbar">
->>>>>>> 881ab70450671ee599e9af7bd17f2a274a3564a7
               <table className="w-full text-left text-[11px] text-darkgray">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100 text-gray-400 font-bold uppercase tracking-wider text-[9px]">
