@@ -5,7 +5,13 @@ import { TableData } from "./TableData";
 const SITES_OVERRIDE_KEY = "newSitesData";
 
 // Predefined supervisors for a rich demo experience
-export const SUPERVISORS = ["Anand R.", "Vijay K.", "Sarah M.", "Priya S.", "Rahul G."];
+export const SUPERVISORS = [
+  "Anand R.",
+  "Vijay K.",
+  "Sarah M.",
+  "Priya S.",
+  "Rahul G.",
+];
 
 // Predefined statuses
 export const SITE_STATUSES = ["Survey", "Design", "In Progress", "Completed"];
@@ -67,11 +73,11 @@ export const getAllSites = () => {
   const baseSites = clients.map((c, index) => {
     const siteNum = c.clientID.split("-").pop() || String(index + 1);
     const siteID = `ST-2026-${siteNum}`;
-    
+
     // Automation: check if there is an active project schedule
     const lead = getLead(c.sourceLeadId);
     const schedule = getSchedule(c.sourceLeadId);
-    
+
     let autoProgress = null;
     let autoStatus = null;
     let autoTargetDate = null;
@@ -80,10 +86,10 @@ export const getAllSites = () => {
     if (schedule && schedule.rooms && schedule.rooms.length > 0) {
       const totalRooms = schedule.rooms.length;
       const completedRooms = schedule.rooms.filter((r) => r.done).length;
-      
+
       // Compute progress percentage based on completed rooms
       autoProgress = Math.round((completedRooms / totalRooms) * 100);
-      
+
       // Determine status based on progress and schedule state
       if (autoProgress === 100) {
         autoStatus = "Completed";
@@ -108,7 +114,8 @@ export const getAllSites = () => {
       } else if (completedRooms > 0) {
         autoNotes = `${completedRooms} out of ${totalRooms} rooms completed. Work on track.`;
       } else if (schedule.confirmedAt) {
-        autoNotes = "Work start date confirmed. Currently in Design / Prep phase.";
+        autoNotes =
+          "Work start date confirmed. Currently in Design / Prep phase.";
       } else {
         autoNotes = "Project won. Survey scheduled.";
       }
@@ -116,7 +123,7 @@ export const getAllSites = () => {
 
     // Default fallbacks if no schedule exists
     const defaultTargetDate = "31.12.2026";
-    
+
     // Merge everything, prioritizing manual overrides
     const override = overrides[siteID] || {};
 
@@ -124,11 +131,13 @@ export const getAllSites = () => {
     let advancePaidDate = null;
     let isAdvancePaid = false;
     try {
-      const savedMilestones = localStorage.getItem(`clientMilestones_${c.clientID}`);
+      const savedMilestones = localStorage.getItem(
+        `clientMilestones_${c.clientID}`,
+      );
       if (savedMilestones) {
         const milestones = JSON.parse(savedMilestones);
         const advanceMilestone = milestones.find(
-          (m) => m.id === 1 || m.name?.toUpperCase()?.includes("ADVANCE")
+          (m) => m.id === 1 || m.name?.toUpperCase()?.includes("ADVANCE"),
         );
         if (advanceMilestone && advanceMilestone.status === "paid") {
           advancePaidDate = advanceMilestone.paidDate;
@@ -146,25 +155,30 @@ export const getAllSites = () => {
       clientPhone: c.clientPhone || "",
       clientEmail: c.clientEmail || "",
       budget: c.budget || "",
-      propertyPreset: override.propertyPreset || lead?.quotePreset || getDefaultPresetForType(c.location),
+      propertyPreset:
+        override.propertyPreset ||
+        lead?.quotePreset ||
+        getDefaultPresetForType(c.location),
       siteType: c.location || "Residential",
       location: c.locationSecondary || "Main City",
       fullAddress: c.siteAddress || c.locationSecondary || "Site Location",
       status: override.status !== undefined ? override.status : null,
       progress: override.progress !== undefined ? override.progress : 0,
-      startDate: override.startDate || advancePaidDate || "Awaiting Advance Payment",
+      startDate:
+        override.startDate || advancePaidDate || "Awaiting Advance Payment",
       targetDate: override.targetDate || autoTargetDate || defaultTargetDate,
-      supervisor: override.supervisor !== undefined ? override.supervisor : null,
+      supervisor:
+        override.supervisor !== undefined ? override.supervisor : null,
       notes: override.notes || autoNotes,
       isAdvancePaid,
       advancePaidDate,
-      ...override
+      ...override,
     };
   });
 
   // Handle any completely custom sites that aren't linked to a client
   const customSites = Object.values(overrides).filter(
-    (s) => !baseSites.some((b) => b.siteID === s.siteID)
+    (s) => !baseSites.some((b) => b.siteID === s.siteID),
   );
 
   return [...baseSites, ...customSites];
@@ -187,10 +201,10 @@ export const saveSite = (site) => {
 export const createCustomSite = (siteData) => {
   const overrides = readJson(SITES_OVERRIDE_KEY, {});
   const sites = getAllSites();
-  
+
   const nextNum = String(sites.length + 1).padStart(3, "0");
   const siteID = `ST-2026-${nextNum}`;
-  
+
   const newSite = {
     siteID,
     clientName: siteData.clientName || "Unknown Client",
@@ -200,7 +214,9 @@ export const createCustomSite = (siteData) => {
     fullAddress: siteData.fullAddress || "Local Site Address",
     status: siteData.status || null,
     progress: siteData.progress || 0,
-    startDate: siteData.startDate || new Date().toLocaleDateString("en-IN").replace(/\//g, "."),
+    startDate:
+      siteData.startDate ||
+      new Date().toLocaleDateString("en-IN").replace(/\//g, "."),
     targetDate: siteData.targetDate || "31.12.2026",
     supervisor: siteData.supervisor || null,
     notes: siteData.notes || "New site registered.",
@@ -215,7 +231,7 @@ export const createCustomSite = (siteData) => {
 export const fetchSurveyMedia = async (siteID) => {
   // Simulate mobile app API network delay
   await new Promise((resolve) => setTimeout(resolve, 800));
-  
+
   return {
     siteID,
     surveyedAt: "08.06.2026",
@@ -223,23 +239,37 @@ export const fetchSurveyMedia = async (siteID) => {
     rooms: [
       {
         name: "Living Room",
-        images: ["/survey_living_room.png", "/survey_living_room_2.png", "/survey_living_room_3.png"],
+        images: [
+          "/survey_living_room.png",
+          "/survey_living_room_2.png",
+          "/survey_living_room_3.png",
+        ],
         dimensions: "18' x 14'",
-        notes: "Sufficient lighting. Outlets need realignment near TV panel wall.",
+        notes:
+          "Sufficient lighting. Outlets need realignment near TV panel wall.",
         status: "Done",
         checkedAt: "08.06.2026 10:15 AM",
       },
       {
         name: "Kitchen",
-        images: ["/survey_kitchen.png", "/survey_kitchen_2.png", "/survey_kitchen_3.png"],
+        images: [
+          "/survey_kitchen.png",
+          "/survey_kitchen_2.png",
+          "/survey_kitchen_3.png",
+        ],
         dimensions: "12' x 10'",
-        notes: "Plumbing inlet matches design. Modular kitchen height check ok.",
+        notes:
+          "Plumbing inlet matches design. Modular kitchen height check ok.",
         status: "Done",
         checkedAt: "08.06.2026 10:45 AM",
       },
       {
         name: "Bathroom",
-        images: ["/survey_bathroom.png", "/survey_bathroom_2.png", "/survey_bathroom_3.png"],
+        images: [
+          "/survey_bathroom.png",
+          "/survey_bathroom_2.png",
+          "/survey_bathroom_3.png",
+        ],
         dimensions: "8' x 6'",
         notes: "Waterproofing checked. Wall tile height needs to be 7 feet.",
         status: "Done",
@@ -247,12 +277,17 @@ export const fetchSurveyMedia = async (siteID) => {
       },
       {
         name: "Bedroom",
-        images: ["/survey_bedroom.png", "/survey_bedroom_2.png", "/survey_bedroom_3.png"],
+        images: [
+          "/survey_bedroom.png",
+          "/survey_bedroom_2.png",
+          "/survey_bedroom_3.png",
+        ],
         dimensions: "14' x 12'",
-        notes: "Air conditioning piping provision ready. Wardrobe niche verified.",
+        notes:
+          "Air conditioning piping provision ready. Wardrobe niche verified.",
         status: "Done",
         checkedAt: "08.06.2026 11:30 AM",
       },
-    ]
+    ],
   };
 };

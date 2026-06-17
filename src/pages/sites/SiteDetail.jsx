@@ -97,7 +97,8 @@ const SiteDetail = () => {
     const statusCycle = ["Pending", "In Progress", "Completed"];
     const updated = checklist.map((item, idx) => {
       if (idx === index) {
-        const nextStatusIdx = (statusCycle.indexOf(item.status) + 1) % statusCycle.length;
+        const nextStatusIdx =
+          (statusCycle.indexOf(item.status) + 1) % statusCycle.length;
         return { ...item, status: statusCycle[nextStatusIdx] };
       }
       return item;
@@ -145,8 +146,6 @@ const SiteDetail = () => {
     else if (val === "Completed") setEditProgress(100);
     else if (!val) setEditProgress(0);
   };
-
-
 
   const handleSaveChanges = async () => {
     if (!site) return;
@@ -223,7 +222,8 @@ const SiteDetail = () => {
     completed: "bg-emerald-100 text-emerald-800 border-emerald-200",
   };
   const activeStatusColor =
-    statusColors[site.status?.toLowerCase()] || "bg-gray-100 text-gray-800 border-gray-200";
+    statusColors[site.status?.toLowerCase()] ||
+    "bg-gray-100 text-gray-800 border-gray-200";
 
   if (site.status?.toLowerCase() === "design") {
     return (
@@ -325,7 +325,9 @@ const SiteDetail = () => {
               <h1 className="text-[26px] font-bold text-darkgray leading-tight">
                 Site Workspace
               </h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${activeStatusColor}`}>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${activeStatusColor}`}
+              >
                 {site.status || "Unassigned"}
               </span>
             </div>
@@ -371,10 +373,8 @@ const SiteDetail = () => {
 
       {/* Main Grid */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 w-full items-start lg:min-h-0 lg:h-full">
-        
         {/* Left Column - Site Info Panels */}
         <div className="lg:col-span-1 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1 pb-6">
-          
           {/* Client & Scope Card */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] border border-gray-100">
             <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100">
@@ -387,46 +387,73 @@ const SiteDetail = () => {
                 <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-base font-bold text-darkgray truncate">{site.clientName}</h3>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Client Profile</p>
+                <h3 className="text-base font-bold text-darkgray truncate">
+                  {site.clientName}
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                  Client Profile
+                </p>
               </div>
             </div>
 
             <div className="space-y-3">
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Site ID</span>
-                <span className="font-bold text-darkgray text-[12px]">{site.siteID}</span>
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                  Site ID
+                </span>
+                <span className="font-bold text-darkgray text-[12px]">
+                  {site.siteID}
+                </span>
               </div>
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Scope</span>
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                  Scope
+                </span>
                 <span className="font-bold text-darkgray text-[12px] text-right">
                   {(() => {
                     const preset = site.propertyPreset;
                     const siteType = site.siteType || "";
-                    const formattedPreset = preset ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK") : "";
-                    return formattedPreset ? `${formattedPreset} / ${siteType}` : siteType;
+                    const formattedPreset = preset
+                      ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK")
+                      : "";
+                    return formattedPreset
+                      ? `${formattedPreset} / ${siteType}`
+                      : siteType;
                   })()}
                 </span>
               </div>
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Start Date</span>
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                  Start Date
+                </span>
                 {site.startDate === "Awaiting Advance Payment" ? (
                   <span className="font-bold text-amber-600 text-[10px] bg-amber-50 border border-amber-100 px-2.5 py-0.5 rounded flex items-center gap-1 uppercase tracking-wider">
                     <FiAlertTriangle size={11} />
                     Awaiting Advance
                   </span>
                 ) : (
-                  <span className="font-bold text-darkgray text-[12px]">{site.startDate}</span>
+                  <span className="font-bold text-darkgray text-[12px]">
+                    {site.startDate}
+                  </span>
                 )}
               </div>
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Budget / Value</span>
-                <span className="font-bold text-select-blue text-[12px]">{site.budget || "—"}</span>
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                  Budget / Value
+                </span>
+                <span className="font-bold text-select-blue text-[12px]">
+                  {site.budget || "—"}
+                </span>
               </div>
               {site.clientPhone && (
                 <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
-                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Contact Phone</span>
-                  <a href={`tel:${site.clientPhone}`} className="font-bold text-darkgray hover:text-select-blue text-[12px] flex items-center gap-1 transition-colors">
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                    Contact Phone
+                  </span>
+                  <a
+                    href={`tel:${site.clientPhone}`}
+                    className="font-bold text-darkgray hover:text-select-blue text-[12px] flex items-center gap-1 transition-colors"
+                  >
                     <FiPhone size={11} className="text-gray-400" />
                     +91 {site.clientPhone}
                   </a>
@@ -434,14 +461,21 @@ const SiteDetail = () => {
               )}
               {site.clientEmail && (
                 <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px] min-w-0">
-                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Contact Email</span>
-                  <span className="font-bold text-darkgray text-[11px] truncate max-w-[55%]" title={site.clientEmail}>
+                  <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                    Contact Email
+                  </span>
+                  <span
+                    className="font-bold text-darkgray text-[11px] truncate max-w-[55%]"
+                    title={site.clientEmail}
+                  >
                     {site.clientEmail}
                   </span>
                 </div>
               )}
               <div className="flex justify-between items-center p-2.5 border border-bg-soft bg-palewhite rounded-[12px]">
-                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">Advance Payment</span>
+                <span className="text-gray-400 font-bold uppercase text-[9px] tracking-wider">
+                  Advance Payment
+                </span>
                 {site.isAdvancePaid ? (
                   <span className="font-bold text-emerald-700 text-[9px] bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider">
                     Paid ({site.advancePaidDate})
@@ -457,14 +491,20 @@ const SiteDetail = () => {
 
           {/* Progress Tracker Card */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] border border-gray-100">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-4">Work Progress</h4>
-            
+            <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-4">
+              Work Progress
+            </h4>
+
             {/* Header progress info */}
             <div className="flex justify-between items-end mb-4">
               <div>
-                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Overall Status</span>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                  Overall Status
+                </span>
                 <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-3xl font-black text-darkgray tracking-tight">{editProgress}%</span>
+                  <span className="text-3xl font-black text-darkgray tracking-tight">
+                    {editProgress}%
+                  </span>
                   <span className="text-[10px] font-bold text-select-blue uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                     {editStatus || "Unassigned"}
                   </span>
@@ -498,7 +538,7 @@ const SiteDetail = () => {
                 const phaseProgress = getPhaseProgress(phase.id);
                 const isCompleted = phaseProgress === 100;
                 const isActive = phaseProgress > 0 && phaseProgress < 100;
-                
+
                 let bgClass = "bg-palewhite border-gray-100 text-gray-400";
                 let barColor = "bg-gray-300";
                 let labelColor = "text-gray-400";
@@ -509,7 +549,8 @@ const SiteDetail = () => {
                 );
 
                 if (isCompleted) {
-                  bgClass = "bg-emerald-50/40 border-emerald-100 text-emerald-800";
+                  bgClass =
+                    "bg-emerald-50/40 border-emerald-100 text-emerald-800";
                   barColor = "bg-emerald-500";
                   labelColor = "text-emerald-950 font-bold";
                   badge = (
@@ -518,7 +559,8 @@ const SiteDetail = () => {
                     </span>
                   );
                 } else if (isActive || (editProgress === 0 && phase.id === 1)) {
-                  bgClass = "bg-blue-50/50 border-blue-200 text-select-blue shadow-xs";
+                  bgClass =
+                    "bg-blue-50/50 border-blue-200 text-select-blue shadow-xs";
                   barColor = "bg-select-blue";
                   labelColor = "text-blue-950 font-bold";
                   badge = (
@@ -529,17 +571,31 @@ const SiteDetail = () => {
                 }
 
                 return (
-                  <div key={phase.id} className={`p-3 border rounded-xl flex flex-col gap-1.5 transition-all duration-300 ${bgClass}`}>
+                  <div
+                    key={phase.id}
+                    className={`p-3 border rounded-xl flex flex-col gap-1.5 transition-all duration-300 ${bgClass}`}
+                  >
                     <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-bold opacity-60 tracking-wider">{phase.short}</span>
+                      <span className="text-[9px] font-bold opacity-60 tracking-wider">
+                        {phase.short}
+                      </span>
                       {badge}
                     </div>
                     <div>
-                      <h5 className={`text-xs font-bold tracking-tight ${labelColor}`}>{phase.name}</h5>
-                      <span className="text-[9.5px] opacity-60 font-semibold">{phaseProgress.toFixed(0)}% Done</span>
+                      <h5
+                        className={`text-xs font-bold tracking-tight ${labelColor}`}
+                      >
+                        {phase.name}
+                      </h5>
+                      <span className="text-[9.5px] opacity-60 font-semibold">
+                        {phaseProgress.toFixed(0)}% Done
+                      </span>
                     </div>
                     <div className="w-full h-1 bg-gray-200/60 rounded-full overflow-hidden mt-1">
-                      <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${phaseProgress}%` }} />
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                        style={{ width: `${phaseProgress}%` }}
+                      />
                     </div>
                   </div>
                 );
@@ -549,7 +605,9 @@ const SiteDetail = () => {
 
           {/* Supervisor Card */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] border border-gray-100">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-4">Site Supervisor</h4>
+            <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-4">
+              Site Supervisor
+            </h4>
             <div className="flex items-center gap-4 p-4 border border-bg-soft bg-palewhite rounded-[16px]">
               <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-select-blue flex items-center justify-center">
                 <FiUser size={20} />
@@ -577,9 +635,12 @@ const SiteDetail = () => {
           {/* Checklist Card */}
           <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] border border-gray-100">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted">Site Checklist</h4>
+              <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted">
+                Site Checklist
+              </h4>
               <span className="text-[10px] font-bold text-select-blue bg-blue-50 px-2 py-0.5 rounded-full">
-                {checklist.filter((item) => item.status === "Completed").length}/{checklist.length} Done
+                {checklist.filter((item) => item.status === "Completed").length}
+                /{checklist.length} Done
               </span>
             </div>
 
@@ -588,9 +649,12 @@ const SiteDetail = () => {
                 const colors = {
                   Pending: "bg-gray-50 text-gray-400 border-gray-200",
                   "In Progress": "bg-amber-50 text-amber-600 border-amber-200",
-                  Completed: "bg-emerald-50 text-emerald-600 border-emerald-200",
+                  Completed:
+                    "bg-emerald-50 text-emerald-600 border-emerald-200",
                 };
-                const badgeStyle = colors[item.status] || "bg-gray-50 text-gray-400 border-gray-200";
+                const badgeStyle =
+                  colors[item.status] ||
+                  "bg-gray-50 text-gray-400 border-gray-200";
 
                 return (
                   <div
@@ -601,7 +665,9 @@ const SiteDetail = () => {
                     <span className="text-[11px] font-bold text-darkgray truncate max-w-[65%]">
                       {item.name}
                     </span>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${badgeStyle}`}>
+                    <span
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${badgeStyle}`}
+                    >
                       {item.status}
                     </span>
                   </div>
@@ -612,12 +678,10 @@ const SiteDetail = () => {
               💡 Tap any item to cycle status
             </p>
           </div>
-
         </div>
 
         {/* Right Columns - Details form & Mobile Survey (Grid span 2) */}
         <div className="lg:col-span-2 flex flex-col gap-6 min-w-0 lg:h-full lg:overflow-y-auto scroll-hidden-bar pr-1 pb-6">
-
           {/* Section 1: Detailed General Information (Inline Editable Dashboard Form) */}
           <div className="bg-white rounded-[20px] p-8 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] border border-gray-100">
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
@@ -653,13 +717,17 @@ const SiteDetail = () => {
                 {/* Status and Supervisor Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-4 border border-bg-soft bg-palewhite rounded-[16px] flex flex-col gap-1.5">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Site Phase / Status</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      Site Phase / Status
+                    </span>
                     <span className="font-bold text-darkgray text-[13px] bg-white border border-gray-100 px-3 py-1.5 rounded-lg inline-block self-start">
                       {editStatus || "Unassigned"}
                     </span>
                   </div>
                   <div className="p-4 border border-bg-soft bg-palewhite rounded-[16px] flex flex-col gap-1.5">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Assigned Supervisor</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      Assigned Supervisor
+                    </span>
                     <span className="font-bold text-darkgray text-[13px] bg-white border border-gray-100 px-3 py-1.5 rounded-lg inline-block self-start">
                       {editSupervisor || "Not Assigned"}
                     </span>
@@ -669,14 +737,18 @@ const SiteDetail = () => {
                 {/* Target Date & Address Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-4 border border-bg-soft bg-palewhite rounded-[16px] flex flex-col gap-1.5">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Target Completion Date</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      Target Completion Date
+                    </span>
                     <span className="font-bold text-darkgray text-[13px] bg-white border border-gray-100 px-3 py-1.5 rounded-lg inline-block self-start">
                       {editTargetDate || "Not Set"}
                     </span>
                   </div>
 
                   <div className="p-4 border border-bg-soft bg-palewhite rounded-[16px] flex flex-col gap-1.5">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Full Site Address</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      Full Site Address
+                    </span>
                     <p className="font-semibold text-darkgray text-[13px] leading-relaxed bg-white border border-gray-100 p-3 rounded-lg whitespace-pre-wrap min-h-[50px]">
                       {editAddress || "—"}
                     </p>
@@ -685,7 +757,9 @@ const SiteDetail = () => {
 
                 {/* Notes Timeline / Logs */}
                 <div className="p-5 border border-bg-soft bg-palewhite rounded-[16px] flex flex-col gap-2">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Site Operations Log</span>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                    Site Operations Log
+                  </span>
                   <div className="bg-white border border-gray-100 rounded-xl p-4 text-[13px] text-darkgray leading-relaxed whitespace-pre-wrap min-h-[100px]">
                     {editNotes || "No logs entered yet."}
                   </div>
@@ -693,7 +767,6 @@ const SiteDetail = () => {
               </div>
             ) : (
               <div className="space-y-6">
-                
                 {/* Status and Supervisor Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <InputField
@@ -724,7 +797,9 @@ const SiteDetail = () => {
                     <InputField
                       type="date"
                       value={toInputDate(editTargetDate)}
-                      onChange={(e) => setEditTargetDate(fromInputDate(e.target.value))}
+                      onChange={(e) =>
+                        setEditTargetDate(fromInputDate(e.target.value))
+                      }
                     />
                   </div>
 
@@ -755,7 +830,6 @@ const SiteDetail = () => {
                     placeholder="Describe status updates, blockages, client feedback, or supervisor reviews..."
                   />
                 </div>
-
               </div>
             )}
           </div>
@@ -767,7 +841,7 @@ const SiteDetail = () => {
                 <span className="w-2.5 h-4 bg-emerald-500 rounded-xs inline-block"></span>
                 Mobile Survey Photos
               </h3>
-              
+
               {surveyData && (
                 <div className="flex items-center gap-2 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
@@ -779,13 +853,19 @@ const SiteDetail = () => {
             {loadingSurvey ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3">
                 <Loader2 className="animate-spin text-select-blue" size={32} />
-                <p className="text-xs text-text-muted font-medium">Syncing survey rooms & media...</p>
+                <p className="text-xs text-text-muted font-medium">
+                  Syncing survey rooms & media...
+                </p>
               </div>
             ) : surveyData ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {surveyData.rooms.map((room, idx) => {
                   return (
-                    <RoomCard key={idx} room={room} onExpand={handleExpandSurveyPhoto} />
+                    <RoomCard
+                      key={idx}
+                      room={room}
+                      onExpand={handleExpandSurveyPhoto}
+                    />
                   );
                 })}
               </div>
@@ -796,9 +876,7 @@ const SiteDetail = () => {
               </div>
             )}
           </div>
-
         </div>
-
       </div>
 
       {/* Lightbox / Zoom View */}
@@ -835,13 +913,23 @@ const SiteDetail = () => {
           )}
 
           {/* Active File Preview */}
-          <div onClick={(e) => e.stopPropagation()} className="max-w-[95vw] max-h-[80vh] w-full flex items-center justify-center">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-[95vw] max-h-[80vh] w-full flex items-center justify-center"
+          >
             {(() => {
               const url = lightboxImg.images[lightboxImg.currentIndex];
-              const ext = (url || "").split("?")[0].split(".").pop().toLowerCase();
-              const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) || url.startsWith("blob:") || url.startsWith("data:image/");
+              const ext = (url || "")
+                .split("?")[0]
+                .split(".")
+                .pop()
+                .toLowerCase();
+              const isImage =
+                ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) ||
+                url.startsWith("blob:") ||
+                url.startsWith("data:image/");
               const isPdf = ext === "pdf" || url.includes("pdf");
-              
+
               if (isImage) {
                 return (
                   <img
@@ -864,8 +952,12 @@ const SiteDetail = () => {
                     <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-select-blue mb-4">
                       <FiFileText size={32} />
                     </div>
-                    <h4 className="text-sm font-bold text-darkgray mb-2">{lightboxImg.title || "Document File"}</h4>
-                    <p className="text-xs text-gray-400 mb-6">Preview not available for this document type.</p>
+                    <h4 className="text-sm font-bold text-darkgray mb-2">
+                      {lightboxImg.title || "Document File"}
+                    </h4>
+                    <p className="text-xs text-gray-400 mb-6">
+                      Preview not available for this document type.
+                    </p>
                     <a
                       href={url}
                       download={lightboxImg.title || "document"}
@@ -939,7 +1031,7 @@ const RoomCard = ({ room, onExpand }) => {
         />
 
         {/* Zoom View Overlay on Hover */}
-        <div 
+        <div
           onClick={() => onExpand(images, activeIdx, room.name)}
           className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer pointer-events-none group-hover:pointer-events-auto"
         >
@@ -985,7 +1077,9 @@ const RoomCard = ({ room, onExpand }) => {
                   setActiveIdx(dotIdx);
                 }}
                 className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
-                  activeIdx === dotIdx ? "bg-white scale-125" : "bg-white/50 hover:bg-white/80"
+                  activeIdx === dotIdx
+                    ? "bg-white scale-125"
+                    : "bg-white/50 hover:bg-white/80"
                 }`}
               />
             ))}
@@ -1006,10 +1100,12 @@ const RoomCard = ({ room, onExpand }) => {
             {room.notes}
           </p>
         </div>
-        
+
         <div className="text-[9px] text-gray-400 border-t border-gray-100 pt-3.5 mt-4 flex justify-between">
           <span>Date: {room.checkedAt}</span>
-          <span className="font-medium">Image {activeIdx + 1} of {images.length}</span>
+          <span className="font-medium">
+            Image {activeIdx + 1} of {images.length}
+          </span>
         </div>
       </div>
     </div>

@@ -96,7 +96,9 @@ const Sites = () => {
       render: (_, row) => {
         const preset = row.propertyPreset;
         const siteType = row.siteType || "";
-        const formattedPreset = preset ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK") : "";
+        const formattedPreset = preset
+          ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK")
+          : "";
         return formattedPreset ? `${formattedPreset} / ${siteType}` : siteType;
       },
     },
@@ -227,8 +229,12 @@ const Sites = () => {
               render: (row) => {
                 const preset = row.propertyPreset;
                 const siteType = row.siteType || "";
-                const formattedPreset = preset ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK") : "";
-                return formattedPreset ? `${formattedPreset} / ${siteType}` : siteType;
+                const formattedPreset = preset
+                  ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK")
+                  : "";
+                return formattedPreset
+                  ? `${formattedPreset} / ${siteType}`
+                  : siteType;
               },
             },
             { label: "Location", key: "location" },

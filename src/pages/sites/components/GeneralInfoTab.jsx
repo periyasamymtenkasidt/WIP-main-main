@@ -59,8 +59,12 @@ const GeneralInfoTab = ({
             {(() => {
               const preset = selectedSite.propertyPreset;
               const siteType = selectedSite.siteType || "";
-              const formattedPreset = preset ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK") : "";
-              return formattedPreset ? `${formattedPreset} / ${siteType}` : siteType;
+              const formattedPreset = preset
+                ? preset.replace(/^(\d+)(BHK)$/i, "$1 BHK")
+                : "";
+              return formattedPreset
+                ? `${formattedPreset} / ${siteType}`
+                : siteType;
             })()}
           </p>
         </div>

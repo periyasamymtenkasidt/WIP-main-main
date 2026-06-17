@@ -99,14 +99,22 @@ const SectionHeader = ({ children }) => (
 function ConvertToClientForm({ lead, onClose, onConvert }) {
   const navigate = useNavigate();
   const { propertyType, city } = resolveLeadAddress(lead);
-  
+
   const latestQuote = useMemo(() => {
     return getLatestQuoteForParent(lead.proposalId);
   }, [lead.proposalId]);
 
   const presetKeys = useMemo(() => getPresetKeys(), []);
-  const activePreset = latestQuote?.presetKey || lead.quotePreset || (presetKeys.includes("2BHK") ? "2BHK" : presetKeys[0]);
-  const activePropertyType = latestQuote?.propertyType || lead.propertyType || propertyType || getPropertyTypesForPreset(activePreset)[0] || "";
+  const activePreset =
+    latestQuote?.presetKey ||
+    lead.quotePreset ||
+    (presetKeys.includes("2BHK") ? "2BHK" : presetKeys[0]);
+  const activePropertyType =
+    latestQuote?.propertyType ||
+    lead.propertyType ||
+    propertyType ||
+    getPropertyTypesForPreset(activePreset)[0] ||
+    "";
   const activeSizeRange = latestQuote?.sizeRange || "";
 
   const {

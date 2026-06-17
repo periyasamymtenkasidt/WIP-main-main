@@ -524,7 +524,8 @@ const LeadEdit = () => {
       sourceLeadId: lead.proposalId,
       projectValue: numericValue,
       quotePreset: formData.quotePreset || lead.quotePreset,
-      propertyType: formData.propertyType || formData.location || lead.propertyType,
+      propertyType:
+        formData.propertyType || formData.location || lead.propertyType,
     };
     localStorage.setItem(
       "newClientsData",
@@ -601,8 +602,9 @@ const LeadEdit = () => {
   const hasProposalBeenSent =
     documents.length > 0 ||
     ["proposal", "negotiation", "won"].includes(lead?.status?.toLowerCase());
-  const showSampleQuoteButton =
-    ["inquiry", "qualified"].includes(lead?.status?.toLowerCase());
+  const showSampleQuoteButton = ["inquiry", "qualified"].includes(
+    lead?.status?.toLowerCase(),
+  );
 
   return (
     <div className="bg-overallbg p-6 font-sans h-full flex flex-col overflow-y-auto lg:overflow-hidden scroll-hidden-bar">
@@ -684,7 +686,9 @@ const LeadEdit = () => {
                 if (!clientID && clientsStr) {
                   try {
                     const clients = JSON.parse(clientsStr);
-                    const found = clients.find((c) => c.sourceLeadId === lead.proposalId);
+                    const found = clients.find(
+                      (c) => c.sourceLeadId === lead.proposalId,
+                    );
                     if (found) clientID = found.clientID;
                   } catch (e) {
                     console.error(e);
@@ -800,9 +804,13 @@ const LeadEdit = () => {
                       const secondary = parts.slice(1).join(",").trim() || "";
                       return (
                         <>
-                          <span className="text-gray-900 font-semibold leading-normal">{primary}</span>
+                          <span className="text-gray-900 font-semibold leading-normal">
+                            {primary}
+                          </span>
                           {secondary && (
-                            <span className="text-select-blue text-sm leading-tight mt-0.5">{secondary}</span>
+                            <span className="text-select-blue text-sm leading-tight mt-0.5">
+                              {secondary}
+                            </span>
                           )}
                         </>
                       );
@@ -910,26 +918,27 @@ const LeadEdit = () => {
                 </div>
               </div>
             )}
-            {lead.status?.toLowerCase() === "negotiation" && lead.negotiationNote && (
-              <div className="mt-12 flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4">
-                <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                  <FiTrendingUp size={18} />
-                </div>
-                <div>
-                  <p className="text-[13px] font-bold text-amber-800">
-                    Active Blocker / Negotiation Details
-                  </p>
-                  <p className="text-[12px] text-amber-700 mt-0.5">
-                    Reason / Remarks: {lead.negotiationNote}
-                  </p>
-                  {lead.expectedClose && (
-                    <p className="text-[11px] text-amber-600 mt-1">
-                      Expected Close Date: {lead.expectedClose}
+            {lead.status?.toLowerCase() === "negotiation" &&
+              lead.negotiationNote && (
+                <div className="mt-12 flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4">
+                  <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <FiTrendingUp size={18} />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-bold text-amber-800">
+                      Active Blocker / Negotiation Details
                     </p>
-                  )}
+                    <p className="text-[12px] text-amber-700 mt-0.5">
+                      Reason / Remarks: {lead.negotiationNote}
+                    </p>
+                    {lead.expectedClose && (
+                      <p className="text-[11px] text-amber-600 mt-1">
+                        Expected Close Date: {lead.expectedClose}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
 
           {/* Card 2: Investment & Grid */}
@@ -1259,7 +1268,9 @@ const LeadEdit = () => {
             };
             const saved = localStorage.getItem("newLeadsData");
             const newLeads = saved ? JSON.parse(saved) : [];
-            const filtered = newLeads.filter((l) => l.proposalId !== lead.proposalId);
+            const filtered = newLeads.filter(
+              (l) => l.proposalId !== lead.proposalId,
+            );
             localStorage.setItem(
               "newLeadsData",
               JSON.stringify([updatedLead, ...filtered]),
@@ -1285,7 +1296,7 @@ const LeadEdit = () => {
                 body,
                 quoteId,
                 total,
-                attachments: [{ name: "Quotation.pdf", size: 154000 }]
+                attachments: [{ name: "Quotation.pdf", size: 154000 }],
               }),
             );
             window.dispatchEvent(new Event("leadDataChanged"));

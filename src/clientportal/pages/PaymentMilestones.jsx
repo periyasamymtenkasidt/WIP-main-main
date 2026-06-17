@@ -13,7 +13,7 @@ const PaymentMilestones = () => {
     formatAmount,
     site,
     updateSite,
-    addClientNotification
+    addClientNotification,
   } = useOutletContext();
 
   const location = useLocation();
@@ -52,16 +52,21 @@ const PaymentMilestones = () => {
     setTimeout(() => {
       setIsSubmittingPayment(false);
       setIsPaymentSuccess(true);
-      
+
       const today = new Date();
       const paidDate = `${String(today.getDate()).padStart(2, "0")}.${String(today.getMonth() + 1).padStart(2, "0")}.${today.getFullYear()}`;
-      
+
       const updated = milestones.map((m) =>
-        m.id === selectedMilestone.id ? { ...m, status: "paid", paidDate, paymentReference, paymentBank } : m
+        m.id === selectedMilestone.id
+          ? { ...m, status: "paid", paidDate, paymentReference, paymentBank }
+          : m,
       );
-      
+
       setMilestones(updated);
-      localStorage.setItem(`clientMilestones_${client.clientID}`, JSON.stringify(updated));
+      localStorage.setItem(
+        `clientMilestones_${client.clientID}`,
+        JSON.stringify(updated),
+      );
 
       // Handle revision activation if this milestone is a revision milestone
       if (selectedMilestone.isRevision && site && updateSite) {
@@ -75,21 +80,22 @@ const PaymentMilestones = () => {
             status: "Pending",
             paymentStatus: "Paid",
             isPaid: true,
-            amount: selectedMilestone.base || selectedMilestone.total
+            amount: selectedMilestone.base || selectedMilestone.total,
           };
           updatedRevisions.push(newRev);
           activatedRevNumber = newRev.revisionNumber;
 
           // Update drawing status if applicable
           if (newRev.drawingId) {
-            updatedDrawings = updatedDrawings.map(d => {
+            updatedDrawings = updatedDrawings.map((d) => {
               if (d.id === newRev.drawingId) {
                 return {
                   ...d,
                   status: "Under Review",
                   reviewer: "Client",
                   reviewDate: paidDate,
-                  reviewComments: newRev.notes || "Changes requested (paid revision)."
+                  reviewComments:
+                    newRev.notes || "Changes requested (paid revision).",
                 };
               }
               return d;
@@ -97,13 +103,13 @@ const PaymentMilestones = () => {
           }
         } else if (selectedMilestone.revisionId) {
           // Fallback compatibility
-          updatedRevisions = updatedRevisions.map(r => {
+          updatedRevisions = updatedRevisions.map((r) => {
             if (r.id === selectedMilestone.revisionId) {
               activatedRevNumber = r.revisionNumber;
               return {
                 ...r,
                 status: "Pending",
-                paymentStatus: "Paid"
+                paymentStatus: "Paid",
               };
             }
             return r;
@@ -111,13 +117,16 @@ const PaymentMilestones = () => {
         }
 
         const dateStr = new Date().toLocaleDateString("en-IN");
-        const timestampStr = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+        const timestampStr = new Date().toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         const systemComment = {
           id: `comm-sys-pay-ms-${Date.now()}`,
           author: "System",
-          text: `💳 **Payment Received via Milestones:** Paid revision payment of ${formatAmount(selectedMilestone.total)} cleared for Revision ${activatedRevNumber || ''}. Revision request created and redesign work assigned to design team.`,
+          text: `💳 **Payment Received via Milestones:** Paid revision payment of ${formatAmount(selectedMilestone.total)} cleared for Revision ${activatedRevNumber || ""}. Revision request created and redesign work assigned to design team.`,
           timestamp: `${paidDate} ${timestampStr}`,
-          attachments: []
+          attachments: [],
         };
 
         const updatedSite = {
@@ -129,20 +138,20 @@ const PaymentMilestones = () => {
           activities: [
             {
               id: `act-pay-ms-${Date.now()}`,
-              text: `Payment cleared for Revision ${activatedRevNumber || ''}. Revision created and work moved to Redesign.`,
+              text: `Payment cleared for Revision ${activatedRevNumber || ""}. Revision created and work moved to Redesign.`,
               user: "System",
-              timestamp: `${timestampStr} ${paidDate}`
+              timestamp: `${timestampStr} ${paidDate}`,
             },
-            ...(site.activities || [])
-          ]
+            ...(site.activities || []),
+          ],
         };
         updateSite(updatedSite);
 
         if (addClientNotification) {
           addClientNotification(
             "Revision Payment Confirmed",
-            `Payment cleared for Revision ${activatedRevNumber || ''}. Revision created and designers assigned.`,
-            "success"
+            `Payment cleared for Revision ${activatedRevNumber || ""}. Revision created and designers assigned.`,
+            "success",
           );
         }
       }
@@ -156,7 +165,7 @@ const PaymentMilestones = () => {
         }
         localStorage.setItem("newClientsData", JSON.stringify(newClients));
       }
-      
+
       setTimeout(() => {
         setPaymentModalOpen(false);
       }, 1000);
@@ -188,7 +197,9 @@ const PaymentMilestones = () => {
           </div>
           <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between items-center text-[12px] text-text-muted">
             <span>Milestones Progression</span>
-            <span className="font-bold text-darkgray">{paidCount} of {milestones.length} Paid</span>
+            <span className="font-bold text-darkgray">
+              {paidCount} of {milestones.length} Paid
+            </span>
           </div>
         </div>
 
@@ -196,12 +207,23 @@ const PaymentMilestones = () => {
         <div className="flex flex-col gap-3.5 text-left">
           {milestones.map((m, idx) => {
             const isPaid = m.status === "paid";
-            const prevRegularMilestones = milestones.slice(0, idx).filter(pm => !pm.isRevision);
-            const isPreviousPaid = m.isRevision || prevRegularMilestones.length === 0 || prevRegularMilestones[prevRegularMilestones.length - 1].status === "paid";
+            const prevRegularMilestones = milestones
+              .slice(0, idx)
+              .filter((pm) => !pm.isRevision);
+            const isPreviousPaid =
+              m.isRevision ||
+              prevRegularMilestones.length === 0 ||
+              prevRegularMilestones[prevRegularMilestones.length - 1].status ===
+                "paid";
             const base = m.base ?? m.amount ?? 0;
             const gstAmt = m.gstAmt ?? Math.round(base * 0.18);
             const total = m.total ?? base + gstAmt;
-            const revisionNum = m.revisionNum || String(m.pendingRevisionData?.revisionNumber || "").replace(/v/i, "");
+            const revisionNum =
+              m.revisionNum ||
+              String(m.pendingRevisionData?.revisionNumber || "").replace(
+                /v/i,
+                "",
+              );
 
             return (
               <div
@@ -224,21 +246,27 @@ const PaymentMilestones = () => {
                         : "bg-white border-gray-200 text-gray-400"
                     }`}
                   >
-                    {isPaid ? <Check size={14} strokeWidth={3} /> : (m.isRevision ? "R" : idx + 1)}
+                    {isPaid ? (
+                      <Check size={14} strokeWidth={3} />
+                    ) : m.isRevision ? (
+                      "R"
+                    ) : (
+                      idx + 1
+                    )}
                   </div>
                   <div>
                     <h4 className="font-bold text-darkgray text-xs sm:text-[13.5px]">
                       {m.name}
                     </h4>
                     <p className="text-[10px] text-text-subtle mt-0.5">
-                      {m.isRevision 
-                        ? `Design Revision Milestone · Base: ${formatAmount(base)} · GST (${m.gstAmt ? Math.round((m.gstAmt/m.base)*100) : 18}%): ${formatAmount(gstAmt)}` 
-                        : `${m.pct}% of project value · Base: ${formatAmount(base)} · GST (18%): ${formatAmount(gstAmt)}`
-                      }
+                      {m.isRevision
+                        ? `Design Revision Milestone · Base: ${formatAmount(base)} · GST (${m.gstAmt ? Math.round((m.gstAmt / m.base) * 100) : 18}%): ${formatAmount(gstAmt)}`
+                        : `${m.pct}% of project value · Base: ${formatAmount(base)} · GST (18%): ${formatAmount(gstAmt)}`}
                     </p>
                     {m.isRevision && (
                       <p className="text-[10px] text-amber-600 font-extrabold mt-0.5">
-                        Revision #{revisionNum || "-"} - Status: {isPaid ? "Paid" : "Pending Payment"}
+                        Revision #{revisionNum || "-"} - Status:{" "}
+                        {isPaid ? "Paid" : "Pending Payment"}
                       </p>
                     )}
                   </div>
@@ -274,23 +302,46 @@ const PaymentMilestones = () => {
 
       {/* Project execution tracker timeline at bottom */}
       <div className="mt-8 pt-6 border-t border-gray-100 text-left">
-        <h4 className="text-[13px] font-bold text-darkgray uppercase tracking-wider mb-5">Project Execution Phase</h4>
+        <h4 className="text-[13px] font-bold text-darkgray uppercase tracking-wider mb-5">
+          Project Execution Phase
+        </h4>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[
-            { title: "Design Signoff", desc: "Drawings approved", completed: true },
+            {
+              title: "Design Signoff",
+              desc: "Drawings approved",
+              completed: true,
+            },
             { title: "Procurement", desc: "Material sourced", completed: true },
-            { title: "First Fix", desc: "Carpentry & Electrical", completed: true },
+            {
+              title: "First Fix",
+              desc: "Carpentry & Electrical",
+              completed: true,
+            },
             { title: "Finishing", desc: "Paint & Veneer", completed: false },
-            { title: "Handover", desc: "Final delivery", completed: false }
+            { title: "Handover", desc: "Final delivery", completed: false },
           ].map((step, idx) => (
-            <div key={idx} className="flex flex-col items-center text-center p-3 rounded-2xl bg-slate-50 border border-gray-100">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 border text-[11px] font-bold ${
-                step.completed ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white border-gray-300 text-text-subtle"
-              }`}>
+            <div
+              key={idx}
+              className="flex flex-col items-center text-center p-3 rounded-2xl bg-slate-50 border border-gray-100"
+            >
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 border text-[11px] font-bold ${
+                  step.completed
+                    ? "bg-emerald-500 border-emerald-500 text-white"
+                    : "bg-white border-gray-300 text-text-subtle"
+                }`}
+              >
                 {step.completed ? <Check size={12} strokeWidth={3} /> : idx + 1}
               </div>
-              <p className={`text-xs font-bold mt-2 ${step.completed ? 'text-darkgray' : 'text-text-subtle'}`}>{step.title}</p>
-              <p className="text-[9.5px] text-text-subtle mt-0.5 leading-tight">{step.desc}</p>
+              <p
+                className={`text-xs font-bold mt-2 ${step.completed ? "text-darkgray" : "text-text-subtle"}`}
+              >
+                {step.title}
+              </p>
+              <p className="text-[9.5px] text-text-subtle mt-0.5 leading-tight">
+                {step.desc}
+              </p>
             </div>
           ))}
         </div>
@@ -305,24 +356,38 @@ const PaymentMilestones = () => {
                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-4 animate-scale-up">
                   <Check size={32} strokeWidth={3} />
                 </div>
-                <h3 className="text-xl font-bold text-darkgray mb-2">Payment Logged Successfully!</h3>
-                <p className="text-sm text-text-subtle">Your payment update is being processed by our accounts team.</p>
+                <h3 className="text-xl font-bold text-darkgray mb-2">
+                  Payment Logged Successfully!
+                </h3>
+                <p className="text-sm text-text-subtle">
+                  Your payment update is being processed by our accounts team.
+                </p>
               </div>
             ) : (
               <div>
-                <h3 className="text-lg font-extrabold text-darkgray mb-2">Log Milestone Payment</h3>
+                <h3 className="text-lg font-extrabold text-darkgray mb-2">
+                  Log Milestone Payment
+                </h3>
                 <p className="text-xs text-text-subtle mb-4">
-                  Log bank transfer details for <span className="font-bold text-darkgray">{selectedMilestone.name}</span>.
+                  Log bank transfer details for{" "}
+                  <span className="font-bold text-darkgray">
+                    {selectedMilestone.name}
+                  </span>
+                  .
                 </p>
                 <div className="bg-slate-50 p-4 rounded-2xl mb-4 border border-slate-100">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-text-subtle">Amount to Pay</span>
-                    <span className="font-bold text-darkgray">{formatAmount(selectedMilestone.total)}</span>
+                    <span className="font-bold text-darkgray">
+                      {formatAmount(selectedMilestone.total)}
+                    </span>
                   </div>
                 </div>
                 <form onSubmit={handleSubmitPayment} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-grey uppercase tracking-wider">Transaction Reference ID</label>
+                    <label className="text-[10px] font-bold text-grey uppercase tracking-wider">
+                      Transaction Reference ID
+                    </label>
                     <input
                       type="text"
                       required
@@ -333,7 +398,9 @@ const PaymentMilestones = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-grey uppercase tracking-wider">Originating Bank Name</label>
+                    <label className="text-[10px] font-bold text-grey uppercase tracking-wider">
+                      Originating Bank Name
+                    </label>
                     <input
                       type="text"
                       required
